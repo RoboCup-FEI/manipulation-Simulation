@@ -65,6 +65,49 @@ def last_error(node):
     return None
 
 
+ERROR_NAMES = {0x2310: "continuous over-current", 0x2320: "short circuit",
+               0x3210: "DC link over-voltage", 0x3220: "DC link under-voltage",
+               0x3222: "DC link under-voltage", 0x4210: "device over-temperature",
+               0x4310: "drive over-temperature", 0x7121: "motor blocked",
+               0x8611: "following error"}
+ERROR_CLASSES = {0x1: "generic", 0x2: "current", 0x3: "voltage", 0x4: "temperature",
+                 0x5: "device hardware", 0x6: "device software", 0x7: "additional modules",
+                 0x8: "monitoring", 0x9: "external", 0xF: "device specific"}
+
+
+def error_name(code):
+    return ERROR_NAMES.get(code) or f"{ERROR_CLASSES.get(code >> 12, 'unknown')} error"
+
+
+def error_history(node, max_n=3):
+    # 0x1003: newest first, low 16 bits = CiA error code
+    try:
+        n = rd(node, 0x1003, 0, "<B")
+        return [rd(node, 0x1003, i, "<I") & 0xFFFF for i in range(1, min(n, max_n) + 1)]
+    except Exception:
+        return []
+
+
+def torque(node):
+    # 0x6077 actual torque, per mille of rated torque (~ per mille of rated current 0x6075)
+    try:
+        return rd(node, 0x6077, 0, "<h")
+    except Exception:
+        return None
+
+
+def rated_current(node):
+    return rd(node, 0x6075, 0, "<I")    # mA
+
+
+def temperature(node):
+    # SCHUNK ERB manufacturer object 0x200D.1 (float, degC) - found by scanning, not documented
+    try:
+        return rd(node, 0x200D, 1, "<f")
+    except Exception:
+        return None
+
+
 def wait_status(node, mask, value, timeout=3.0):
     t0 = time.time()
     while time.time() - t0 < timeout:

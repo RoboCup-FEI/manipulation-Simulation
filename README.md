@@ -239,6 +239,7 @@ Then plan and execute in RViz, or run your `simple_moveit.py` scripts. They use 
 | ✊ Grasp a 15 mm part (35 N) | `ros2 run lwa4p_driver gripper_cmd grip 15 --force 35` |
 | ✋ Open / gripper state | `ros2 run lwa4p_driver gripper_cmd open` · `... state` |
 | 🧯 Reset faults | `ros2 service call /lwa4p_driver/reset std_srvs/srv/Trigger` |
+| 🩺 Fault codes, temperatures, torque/current (read-only) | `ros2 service call /lwa4p_driver/diagnose std_srvs/srv/Trigger` |
 | 🛑 Disable (brakes close) | `ros2 service call /lwa4p_driver/disable std_srvs/srv/Trigger` |
 
 <details>

@@ -97,7 +97,8 @@ class Lwa4pDriver(Node):
             for i, n in enumerate(self.nodes):
                 lo, hi = ds402.sw_limits(n)
                 self.limits.append(sorted((self.to_rad(i, lo), self.to_rad(i, hi))))
-            self.q = [self.to_rad(i, ds402.position(n)) for i, n in enumerate(self.nodes)]
+            self.rated_a = [ds402.rated_current(n) / 1000.0 for n in self.nodes]
+            self.q =[self.to_rad(i, ds402.position(n)) for i, n in enumerate(self.nodes)]
 
 
         self.state_lock = threading.Lock()
@@ -116,6 +117,7 @@ class Lwa4pDriver(Node):
         self.create_service(Trigger, "~/enable", self.srv_enable, callback_group=cb)
         self.create_service(Trigger, "~/disable", self.srv_disable, callback_group=cb)
         self.create_service(Trigger, "~/reset", self.srv_reset, callback_group=cb)
+        self.create_service(Trigger, "~/diagnose", self.srv_diagnose, callback_group=cb)
         self.action = ActionServer(
             self, FollowJointTrajectory, f"{controller}/follow_joint_trajectory",
             execute_callback=self.execute, goal_callback=self.on_goal,
@@ -165,11 +167,10 @@ class Lwa4pDriver(Node):
 
     def step(self, q, sw):
         if sw is not None:
-            for i, s in enumerate(sw):
-                if ds402.is_fault(s) or not ds402.is_enabled(s):
-                    self.trip(f"joint {self.joint_names[i]} statusword 0x{s:04X}"
-                              f"{' FAULT' if ds402.is_fault(s) else ' not enabled'}")
-                    return
+            bad = [i for i, s in enumerate(sw) if ds402.is_fault(s) or not ds402.is_enabled(s)]
+            if bad:
+                self.trip("drive fault", [(i, sw[i]) for i in bad])
+                return
         with self.state_lock:
             traj, t0 = self.traj, self.traj_t0
         if not self.enabled or traj is None:
@@ -241,6 +242,31 @@ class Lwa4pDriver(Node):
                          f"err {(q[i] - q_des[i]) / DEG:+6.2f} deg  sw {s} {' '.join(flags)}")
         self.get_logger().warn("\n".join(lines))
 
+    def joint_report(self, i, sw=None, torque=()):
+        n = self.nodes[i]
+        sw = ds402.statusword(n) if sw is None else sw
+        state = ds402.ready_state(sw) or ("FAULT" if ds402.is_fault(sw) else "not ready")
+        s = f"{self.joint_names[i]}: statusword 0x{sw:04X} {state}"
+        t = ds402.temperature(n)
+        if t is not None:
+            s += f", {t:.1f} C"
+        torque = [x for x in torque if x is not None]
+        if torque:      # per mille samples; current estimated from mean |torque| x rated current
+            mean = sum(torque) / len(torque)
+            mean_abs = sum(abs(x) for x in torque) / len(torque)
+            peak = max(torque, key=abs)
+            s += (f", torque {mean / 10:+.0f}% (peak {peak / 10:+.0f}%) of rated, "
+                  f"~{mean_abs / 1000 * self.rated_a[i]:.2f} A of {self.rated_a[i]:.2f} A rated")
+        errs = ds402.error_history(n)
+        if errs:
+            s += ", errors " + ", ".join(f"0x{e:04X} {ds402.error_name(e)}" for e in errs)
+        return s
+
+    def temperatures(self):
+        ts = [ds402.temperature(n) for n in self.nodes]
+        return " ".join(f"{name.replace('_joint', '')}={'?' if t is None else f'{t:.1f}'}"
+                        for name, t in zip(self.joint_names, ts)) + " C"
+
     def hold(self, q):
         for i, n in enumerate(self.nodes):
             try:
@@ -248,11 +274,17 @@ class Lwa4pDriver(Node):
             except Exception:
                 pass
 
-    def trip(self, why):
-        self.get_logger().error(f"{why} -> disabling all drives")
+    def trip(self, why, bad=()):
         for n in self.nodes:
             ds402.disable(n)
         self.enabled = False
+        if bad:     # details are read after the stop; the error history survives the disable
+            try:
+                why = "; ".join(self.joint_report(i, s) for i, s in bad)
+                self.get_logger().error(f"temperatures at trip: {self.temperatures()}")
+            except Exception:
+                why = "; ".join(f"{self.joint_names[i]} statusword 0x{s:04X}" for i, s in bad)
+        self.get_logger().error(f"{why} -> all drives disabled")
         self.fault = why
         self.finish(FollowJointTrajectory.Result.INVALID_GOAL, why)
 
@@ -301,12 +333,12 @@ class Lwa4pDriver(Node):
                     time.sleep(self.enable_settle)
                     if not ds402.commutate(self.nodes[i]):
                         raise RuntimeError(f"{self.joint_names[i]} did not move during the "
-                                           f"commutation check (+0.5 deg and back)")
+                                           f"commutation check (+0.5 deg and back) - "
+                                           f"{self.joint_report(i, torque=[ds402.torque(self.nodes[i])])}")
                     sw = ds402.statusword(self.nodes[i])
                     if not ds402.is_enabled(sw):
-                        raise RuntimeError(f"{self.joint_names[i]} did not stay enabled "
-                                           f"(statusword 0x{sw:04X}, last error "
-                                           f"0x{ds402.last_error(self.nodes[i]) or 0:04X})")
+                        raise RuntimeError(f"{self.joint_names[i]} did not stay enabled - "
+                                           f"{self.joint_report(i, sw)}")
                     self.get_logger().info(f"{self.joint_names[i]} enabled")
                 self.enabled = True
                 self.fault = ""
@@ -317,6 +349,21 @@ class Lwa4pDriver(Node):
                     ds402.disable(n)
                 self.enabled = False
             res.success, res.message = False, f"enable failed: {e}"
+            self.get_logger().error(res.message)
+        return res
+
+    def srv_diagnose(self, req, res):
+        torque = [[] for _ in self.nodes]
+        for _ in range(10):     # torque is noisy; lock per round so a running trajectory is not stalled
+            with self.can_lock:
+                for i, n in enumerate(self.nodes):
+                    torque[i].append(ds402.torque(n))
+            time.sleep(0.02)
+        with self.can_lock:
+            lines = [self.joint_report(i, torque=torque[i]) for i in range(len(self.nodes))]
+        if self.fault:
+            lines.insert(0, f"last trip: {self.fault}")
+        res.success, res.message = True, "\n".join(lines)
         return res
 
     def srv_disable(self, req, res):
