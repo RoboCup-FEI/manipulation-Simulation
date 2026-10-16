@@ -3,6 +3,7 @@ import time
 
 import rclpy
 from control_msgs.action import GripperCommand
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -13,6 +14,8 @@ from std_srvs.srv import Trigger
 from lwa4p_driver.wsg50 import E_SUCCESS, STATUS, WSG
 
 JAW_MAX_MM = 109.0
+ERROR_FLAGS = {"TEMP_FAULT", "POWER_FAULT", "CURR_FAULT", "FINGER_FAULT", "ERROR"}
+WARN_FLAGS = {"TEMP_WARNING", "FAST_STOP", "CMD_FAILURE", "SCRIPT_FAILURE"}
 
 
 class GripperNode(Node):
@@ -27,6 +30,7 @@ class GripperNode(Node):
         self.accel = p("acceleration_mm_s2", 100.0).value
         self.open_gap = p("open_gap_mm", 30.0).value
         rate = p("state_rate_hz", 10.0).value
+        diag_rate = p("diagnostics_rate_hz", 1.0).value
 
         self.lock = threading.Lock()
         self.wsg = WSG(self.channel)
@@ -37,6 +41,7 @@ class GripperNode(Node):
             flags, names = self.wsg.system_state()
         self.referenced = "REFERENCED" in names
         self.gap_mm, self.force_n, self.gstate = 0.0, 0.0, "?"
+        self.flags, self.temp_c = names, None
         self.poll()
 
         cb = ReentrantCallbackGroup()
@@ -44,6 +49,8 @@ class GripperNode(Node):
         # same value as the URDF/MoveIt joint "gripper_joint" (fingertip gap, m)
         self.js_pub = self.create_publisher(JointState, "joint_states", 10)
         self.create_timer(1.0 / rate, self.publish, callback_group=cb)
+        self.diag_pub = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
+        self.create_timer(1.0 / diag_rate, self.publish_diagnostics, callback_group=cb)
         self.create_service(Trigger, "~/home", self.srv_home, callback_group=cb)
         self.create_service(Trigger, "~/open", self.srv_open, callback_group=cb)
         self.create_service(Trigger, "~/stop", self.srv_stop, callback_group=cb)
@@ -82,6 +89,42 @@ class GripperNode(Node):
         j.name = ["gripper_joint"]
         j.position = [max(0.0, self.gap_mm) / 1000.0]
         self.js_pub.publish(j)
+
+    def publish_diagnostics(self):
+        st = DiagnosticStatus(name="gripper: WSG 50", hardware_id=self.channel)
+        note = ""
+        if self.lock.acquire(blocking=False):
+            try:
+                self.flags = self.wsg.system_state()[1]
+                self.temp_c = self.wsg.temperature()
+            except Exception as e:
+                note = f"no response: {e}"
+            finally:
+                self.lock.release()
+        else:
+            note = "busy, flags from last read"     # a move or grasp holds the lock
+        bad = ERROR_FLAGS.intersection(self.flags)
+        warn = WARN_FLAGS.intersection(self.flags)
+        if note.startswith("no response") or bad or self.gstate == "ERROR":
+            st.level = DiagnosticStatus.ERROR
+        elif warn or "REFERENCED" not in self.flags:
+            st.level = DiagnosticStatus.WARN
+        else:
+            st.level = DiagnosticStatus.OK
+        parts = [self.gstate] + sorted(bad | warn)
+        if "REFERENCED" not in self.flags:
+            parts.append("not referenced - call ~/home")
+        if note:
+            parts.append(note)
+        st.message = ", ".join(parts)
+        vals = {"grasp_state": self.gstate, "gap_mm": f"{self.gap_mm:.1f}", "force_n": f"{self.force_n:.1f}",
+                "temperature_c": "?" if self.temp_c is None else f"{self.temp_c:.1f}",
+                "flags": " ".join(self.flags) or "none"}
+        st.values = [KeyValue(key=k, value=v) for k, v in vals.items()]
+        arr = DiagnosticArray()
+        arr.header.stamp = self.get_clock().now().to_msg()
+        arr.status = [st]
+        self.diag_pub.publish(arr)
 
     def prepare(self):
         flags, names = self.wsg.system_state()

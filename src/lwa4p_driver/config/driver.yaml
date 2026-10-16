@@ -17,3 +17,11 @@ lwa4p_driver:
     goal_time_tolerance_s: 3.0
     enable_settle_s: 0.3
     controller_name: arm_controller
+
+    # /joint_states effort = drive torque (0x6077) as a fraction of rated torque x effort_scale.
+    # Leave 1.0 for "fraction of rated"; put the rated torque in N·m per joint to publish N·m.
+    effort_scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    effort_alpha: 0.5               # weight of each new torque sample (1.0 = no smoothing)
+    diagnostics_rate_hz: 1.0
+    temperature_warn_c: 60.0        # 0x200D.1 module temperature; the modules' own limit looks like 80 C
+    temperature_error_c: 75.0

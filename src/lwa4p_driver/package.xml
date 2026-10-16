@@ -8,6 +8,7 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>control_msgs</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>lwa4p_description</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>

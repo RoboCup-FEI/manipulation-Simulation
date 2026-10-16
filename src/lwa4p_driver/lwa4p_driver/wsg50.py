@@ -113,6 +113,11 @@ class WSG:
         check(st, 0x41)
         return GRASP_STATE.get(d[0], str(d[0]))
 
+    def temperature(self):
+        st, d = self.call(0x46)     # no parameters; int16 in 0.1 degC
+        check(st, 0x46)
+        return struct.unpack("<h", d[:2])[0] / 10.0
+
     def get_param(self, cmd):
         st, d = self.call(cmd)
         check(st, cmd)

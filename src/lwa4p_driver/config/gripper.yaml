@@ -8,3 +8,4 @@ gripper:
     acceleration_mm_s2: 100.0
     open_gap_mm: 85.0
     state_rate_hz: 10.0
+    diagnostics_rate_hz: 1.0

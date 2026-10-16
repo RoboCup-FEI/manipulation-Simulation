@@ -242,6 +242,21 @@ Then plan and execute in RViz, or run your `simple_moveit.py` scripts. They use 
 | 🩺 Fault codes, temperatures, torque/current (read-only) | `ros2 service call /lwa4p_driver/diagnose std_srvs/srv/Trigger` |
 | 🛑 Disable (brakes close) | `ros2 service call /lwa4p_driver/disable std_srvs/srv/Trigger` |
 
+### 📡 Feedback topics
+
+| Topic | Content |
+|---|---|
+| `/joint_states` | `position` (rad), `velocity` (rad/s, from position), `effort` = drive torque as a fraction of rated torque (× `effort_scale` in `driver.yaml`), each joint updated ~3 Hz and smoothed |
+| `/gripper/state` | `position` = fingertip gap (m), `effort` = grip force (N) |
+| `/diagnostics` | 1 Hz. Per joint: state, statusword, temperature, mean/peak torque %, estimated current, CANopen error history. Gripper: grasp state, flags, temperature, gap, force |
+
+```bash
+ros2 topic echo /diagnostics                        # raw
+ros2 run rqt_robot_monitor rqt_robot_monitor        # GUI (sudo apt install ros-humble-rqt-robot-monitor)
+```
+
+Joint temperatures WARN at 60 °C and ERROR at 75 °C (`temperature_warn_c` / `temperature_error_c`). The temperature is read from the undocumented ERB object `0x200D.1` and the current is estimated as torque × rated current, because these drives do not provide `0x6078` (current) or `0x6079` (DC-link voltage).
+
 <details>
 <summary><b>⚙️ Limits and hardware notes</b></summary>
 
