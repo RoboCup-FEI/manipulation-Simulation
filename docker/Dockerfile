@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-humble-gripper-controllers \
         ros-humble-joint-state-broadcaster \
         ros-humble-joint-trajectory-controller \
+        ros-humble-joy-linux \
         ros-humble-forward-command-controller \
         ros-humble-moveit \
         ros-humble-rmw-fastrtps-cpp \
@@ -96,9 +97,10 @@ USER ros
 # Fail the build if imports, installed resources, or launch arguments break.
 # These checks do not connect to CAN and do not start a simulator or robot.
 RUN source /usr/local/bin/lwa4p-env.bash \
-    && python3 -c 'import can, canopen; import lwa4p_driver.driver_node; import lwa4p_driver.gripper_node' \
+    && python3 -c 'import can, canopen; import lwa4p_driver.driver_node; import lwa4p_driver.gripper_node; import lwa4p_driver.teleop' \
     && ros2 launch lwa4p_gazebo gazebo.launch.py --show-args \
-    && ros2 launch lwa4p_moveit_config real.launch.py --show-args
+    && ros2 launch lwa4p_moveit_config real.launch.py --show-args \
+    && ros2 launch lwa4p_driver teleop.launch.py --show-args
 
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/usr/local/bin/lwa4p-entrypoint"]

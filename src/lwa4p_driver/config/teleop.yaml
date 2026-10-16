@@ -1,0 +1,36 @@
+teleop:
+  ros__parameters:
+    joint_names: [arm_1_joint, arm_2_joint, arm_3_joint, arm_4_joint, arm_5_joint, arm_6_joint]
+    jog_topic: /lwa4p_driver/jog
+    max_velocity_deg_s: 15.0        # at 100 %; the driver caps it at jog_max_velocity_deg_s
+    speed_levels: [0.1, 0.25, 0.5, 1.0]
+    speed_level: 1                  # index into speed_levels at start
+    step_sizes_deg: [0.1, 0.5, 1.0, 2.0, 5.0]
+    step_size: 2                    # index into step_sizes_deg at start
+    rate_hz: 20.0
+
+    # keyboard (only when started from a terminal: ros2 run lwa4p_driver teleop)
+    keyboard: true
+    key_hold_s: 0.7                 # hold mode: keeps moving this long after the last key event
+    key_repeat_s: 0.1               # step mode: key events closer than this are auto-repeat
+
+    # gamepad: Xbox controller through joy_linux (/dev/input/js0, kernel xpad driver).
+    # Other drivers (xpadneo, xone) number axes differently - check with: ros2 topic echo /joy
+    # Sticks and D-pad read +1 for left/up. Flip joint_axis_signs to taste.
+    joy_timeout_s: 0.5              # stop when /joy goes quiet (joy_linux autorepeat_rate must be > 2 Hz)
+    deadman_button: 4               # LB: hold to jog
+    joint_axes: [0, 1, 4, 3, -1, 6] # J1 left stick X, J2 left stick Y, J3 right stick Y,
+                                    # J4 right stick X, J5 triggers (below), J6 D-pad X; -1 = none
+    joint_axis_signs: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    trigger_joint: 5                # RT = +, LT = -
+    trigger_axes: [5, 2]            # [RT, LT]
+    trigger_rest: 1.0
+    trigger_pressed: -1.0
+    deadzone: 0.15
+    response_exponent: 2.0          # 1 = linear, 2 = finer control near the centre
+    speed_axis: 7                   # D-pad Y: speed up / down
+    open_button: 0                  # A
+    grasp_button: 1                 # B
+    disable_button: 6               # Back: disable drives (brakes close)
+    gripper_open_m: 0.085
+    grasp_force_n: 35.0

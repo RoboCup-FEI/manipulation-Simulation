@@ -131,6 +131,26 @@ ros2 run lwa4p_driver gripper_cmd home
 Wait for each command to succeed. Use **Plan & Execute** in RViz to move the
 robot. The gripper must be connected on `can1` for this launch.
 
+### Jog with a gamepad or the keyboard
+
+To use an Xbox gamepad, give the container the input devices and start the
+gamepad node with the launch. Use this instead of the `docker run` above:
+
+```bash
+docker run --rm -it --init --name lwa4p-real --network host --shm-size=512m -e ROS_DOMAIN_ID=43 -e DISPLAY="$DISPLAY" -e LIBGL_ALWAYS_SOFTWARE=1 --mount type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix,readonly --mount type=bind,src=/dev/input,dst=/dev/input --device-cgroup-rule='c 13:* rmw' --group-add "$(getent group input | cut -d: -f3)" lwa4p:humble ros2 launch lwa4p_moveit_config real.launch.py can_channel:=can0 teleop:=true
+```
+
+Check on the host that the gamepad is `/dev/input/js0` (`ls /dev/input/js*`);
+otherwise add `joy_dev:=/dev/input/jsN`. Hold **LB** and use the sticks.
+
+For the keyboard, run inside the container (works with or without the gamepad):
+
+```bash
+ros2 run lwa4p_driver teleop
+```
+
+The key and button layout is in the main README.
+
 ### Stop the robot
 
 Inside the container:

@@ -17,3 +17,8 @@ lwa4p_driver:
     goal_time_tolerance_s: 3.0
     enable_settle_s: 0.3
     controller_name: arm_controller
+
+    # jogging on /lwa4p_driver/jog (control_msgs/JointJog), used by the teleop node
+    jog_max_velocity_deg_s: 15.0    # capped at max_velocity_deg_s
+    jog_acceleration_deg_s2: 20.0   # ramp of the jog setpoint; gentle for the motor supply
+    jog_timeout_s: 0.25             # velocity jog stops if no message arrives for this long

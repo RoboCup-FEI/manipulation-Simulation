@@ -21,6 +21,7 @@
 | | |
 |---|---|
 | 🔌 **Real-robot driver** | Python CANopen (CiA 402) driver for the 6 ERB modules over SocketCAN. Publishes `/joint_states` and serves a `FollowJointTrajectory` action |
+| 🎮 **Jogging** | Joint jogging of the real arm from an Xbox gamepad or the keyboard, with a deadman, speed levels and step mode |
 | ✋ **WSG 50 gripper** | Weiss/Schunk WSG 50-110 on the AUX CAN, with a `GripperCommand` action and force-controlled grasping |
 | 🧭 **MoveIt 2** | Plan and execute from RViz or from Python; named poses `home`, `work1`, `work2`, `open`, `closed` |
 | 🌍 **Gazebo simulation** | Same controller names as the real arm, PID-driven joints and working friction grasps |
@@ -98,7 +99,7 @@ sudo apt install \
 <summary><b>Real robot only: CAN tools and Python CANopen</b></summary>
 
 ```bash
-sudo apt install can-utils
+sudo apt install can-utils ros-humble-joy-linux    # joy-linux: gamepad jogging
 pip install canopen python-can
 ```
 </details>
@@ -240,6 +241,34 @@ Then plan and execute in RViz, or run your `simple_moveit.py` scripts. They use 
 | ✋ Open / gripper state | `ros2 run lwa4p_driver gripper_cmd open` · `... state` |
 | 🧯 Reset faults | `ros2 service call /lwa4p_driver/reset std_srvs/srv/Trigger` |
 | 🛑 Disable (brakes close) | `ros2 service call /lwa4p_driver/disable std_srvs/srv/Trigger` |
+
+### 🎮 Jogging (gamepad / keyboard)
+
+Joint-by-joint jogging of the real arm after `enable`. Jogging and MoveIt trajectories exclude each other: a trajectory is rejected while the arm is being jogged, and jog commands are ignored while a trajectory runs.
+
+```bash
+ros2 launch lwa4p_moveit_config real.launch.py teleop:=true   # + Xbox gamepad (joy_linux, /dev/input/js0)
+ros2 run lwa4p_driver teleop                                  # keyboard, in its own terminal
+ros2 launch lwa4p_driver teleop.launch.py                     # gamepad only, next to a running driver
+```
+
+| Gamepad (Xbox) | | Keyboard | |
+|---|---|---|---|
+| **LB (hold)** | deadman, nothing moves without it | `q`/`a` … `y`/`h` | joint 1 … 6 `+`/`−` |
+| Left stick X / Y | joint 1 / joint 2 | `,` `.` | step smaller / larger (0.1 – 5°) |
+| Right stick Y / X | joint 3 / joint 4 | `-` `+` | speed down / up |
+| RT / LT | joint 5 `+`/`−` | `m` | step ↔ hold mode |
+| D-pad ← → | joint 6 | `space` | **stop** |
+| D-pad ↑ ↓ | speed up / down | `o` `c` | gripper open / grasp |
+| A / B | gripper open / grasp | `p` | print joint positions |
+| Back | disable drives (brakes close) | `X` | disable drives |
+
+- 🐢 Speed levels are 10 / 25 / 50 / 100 % of 15°/s, starting at 25 %. The driver ramps every jog at 20°/s², which is gentle for the motor supply.
+- ⌨️ **Step mode** (default): each key press moves one step. A held key gives at most two steps, because auto-repeat is filtered. **Hold mode** jogs while the key is held. The terminal has no key-release events, so the arm keeps moving for up to 0.7 s after you let go.
+- 🎮 Press LB with the sticks and triggers released, otherwise nothing moves. The arm stops when LB is released, when `/joy` goes quiet for 0.5 s, or when the driver gets no command for 0.25 s.
+- 🧱 Jogging stops at the drive limits minus `limit_margin_deg`. There is **no collision checking**, so watch the table and the gripper.
+- 🔧 Axis numbering differs between Xbox drivers (`xpad` over USB, `xpadneo` or `xone` wireless). Check with `ros2 topic echo /joy` and adjust `lwa4p_driver/config/teleop.yaml`. Directions per joint are `joint_axis_signs` there. Driver limits are the `jog_*` parameters in `driver.yaml`.
+- 🔌 Other tools can jog through `/lwa4p_driver/jog` (`control_msgs/JointJog`): `velocities` in rad/s jog while messages keep coming, `displacements` in rad make one step, and an all-zero velocity message stops.
 
 <details>
 <summary><b>⚙️ Limits and hardware notes</b></summary>

@@ -22,5 +22,6 @@ setup(
     entry_points={"console_scripts": ["driver = lwa4p_driver.driver_node:main",
                                       "test_move = lwa4p_driver.test_move:main",
                                       "gripper = lwa4p_driver.gripper_node:main",
-                                      "gripper_cmd = lwa4p_driver.gripper_cmd:main"]},
+                                      "gripper_cmd = lwa4p_driver.gripper_cmd:main",
+                                      "teleop = lwa4p_driver.teleop:main"]},
 )

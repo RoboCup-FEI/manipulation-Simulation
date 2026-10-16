@@ -8,6 +8,7 @@ import time
 import canopen
 import rclpy
 from control_msgs.action import FollowJointTrajectory
+from control_msgs.msg import JointJog
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -120,6 +121,7 @@ class Lwa4pDriver(Node):
             self, FollowJointTrajectory, f"{controller}/follow_joint_trajectory",
             execute_callback=self.execute, goal_callback=self.on_goal,
             cancel_callback=lambda _: CancelResponse.ACCEPT, callback_group=cb)
+        self.jog_init(cb)
 
         self.running = True
         self.thread = threading.Thread(target=self.loop, daemon=True)
@@ -145,7 +147,8 @@ class Lwa4pDriver(Node):
                 with self.can_lock:
                     q = [self.to_rad(i, ds402.position(n)) for i, n in enumerate(self.nodes)]
                     sw = None
-                    if self.enabled and (cycle % 4 == 0 or self.traj is not None):
+                    if self.enabled and (cycle % 4 == 0 or self.traj is not None
+                                         or self.jog_s is not None):
                         sw = [ds402.statusword(n) for n in self.nodes]
                     self.step(q, sw)
             except Exception as e:      # CAN timeout etc.
@@ -172,6 +175,10 @@ class Lwa4pDriver(Node):
                     return
         with self.state_lock:
             traj, t0 = self.traj, self.traj_t0
+        if self.enabled and traj is None:
+            self.jog_step(q)
+        else:
+            self.jog_idle()
         if not self.enabled or traj is None:
             return
         t = time.time() - t0
@@ -328,6 +335,156 @@ class Lwa4pDriver(Node):
         res.success, res.message = True, "all joints disabled (brakes closed)"
         return res
 
+    # ---------- jogging ----------
+    # ~/jog takes control_msgs/JointJog: velocities (rad/s) jog while messages keep coming,
+    # displacements (rad) move a step at the given velocity. A velocity message replaces the
+    # whole command (unlisted joints stop, pending steps are dropped), so all zeros = stop.
+    # The loop runs its own setpoint per joint with an acceleration ramp and feeds it to the
+    # drives like a trajectory. Jogging and trajectories exclude each other.
+    def jog_init(self, cb):
+        p = self.declare_parameter
+        self.jog_max_vel = min(self.max_vel, p("jog_max_velocity_deg_s", 15.0).value * DEG)
+        self.jog_accel = p("jog_acceleration_deg_s2", 20.0).value * DEG
+        self.jog_timeout = p("jog_timeout_s", 0.25).value
+        n = len(self.nodes)
+        # written by on_jog, read by the loop (state_lock)
+        self.jog_vd = [0.0] * n
+        self.jog_stamp = 0.0
+        self.jog_steps = [0.0] * n
+        self.jog_step_vel = [self.jog_max_vel] * n
+        self.jog_cancel = False
+        self.jog_blocked = False
+        # loop only
+        self.jog_s = None               # setpoint per joint, None = not jogging
+        self.jog_v = [0.0] * n
+        self.jog_goal = [None] * n      # step target per joint
+        self.jog_moving = [False] * n
+        self.jog_t = 0.0
+        self.create_subscription(JointJog, "~/jog", self.on_jog, 10, callback_group=cb)
+
+    def jog_reject(self, why):
+        self.get_logger().warn(f"ignoring jog: {why}", throttle_duration_sec=2.0)
+
+    def on_jog(self, msg):
+        warn = self.jog_reject
+        if not self.enabled:
+            return warn("drives not enabled (call ~/enable)")
+        if self.traj is not None:
+            return warn("trajectory running")
+        try:
+            idx = [self.joint_names.index(j) for j in msg.joint_names]
+        except ValueError:
+            return warn(f"unknown joint in {list(msg.joint_names)}")
+        vel = list(msg.velocities)
+        if msg.displacements:
+            if len(msg.displacements) != len(idx) or vel and len(vel) != len(idx):
+                return warn("joint_names, displacements and velocities differ in length")
+            with self.state_lock:
+                if self.jog_blocked:
+                    return warn("stopped after a tracking error - send a stop (all zero velocities)")
+                for k, i in enumerate(idx):
+                    if msg.displacements[k]:
+                        self.jog_steps[i] += msg.displacements[k]
+                        v = abs(vel[k]) if vel and vel[k] else self.jog_max_vel
+                        self.jog_step_vel[i] = min(self.jog_max_vel, v)
+            return
+        if len(vel) != len(idx):
+            return warn("joint_names and velocities differ in length")
+        vd = [0.0] * len(self.nodes)
+        for k, i in enumerate(idx):
+            vd[i] = max(-self.jog_max_vel, min(self.jog_max_vel, vel[k]))
+        with self.state_lock:
+            if self.jog_blocked:
+                if any(vd):
+                    return warn("stopped after a tracking error - release and jog again")
+                self.jog_blocked = False
+            self.jog_vd = vd
+            self.jog_stamp = time.time()
+            self.jog_steps = [0.0] * len(self.nodes)
+            self.jog_cancel = True
+
+    def jog_idle(self):
+        self.jog_s = None
+        self.jog_moving = [False] * len(self.nodes)
+        with self.state_lock:
+            self.jog_vd = [0.0] * len(self.nodes)
+            self.jog_steps = [0.0] * len(self.nodes)
+            self.jog_blocked = False
+
+    def jog_step(self, q):
+        now = time.time()
+        n = len(q)
+        with self.state_lock:
+            vd = self.jog_vd if now - self.jog_stamp < self.jog_timeout else [0.0] * n
+            steps, self.jog_steps = self.jog_steps, [0.0] * n
+            step_vel = list(self.jog_step_vel)
+            cancel, self.jog_cancel = self.jog_cancel, False
+        if self.jog_s is None:
+            if not any(vd) and not any(steps):
+                return
+            self.jog_s, self.jog_v = list(q), [0.0] * n
+            self.jog_goal, self.jog_moving = [None] * n, [False] * n
+            self.jog_t = now - 1.0 / self.rate
+        dt = min(now - self.jog_t, 0.2)
+        self.jog_t = now
+        s, v, a = self.jog_s, self.jog_v, self.jog_accel
+        err = max(abs(x - y) for x, y in zip(q, s))
+        if err > self.path_tol:
+            self.hold(q)
+            self.jog_s = None
+            with self.state_lock:
+                self.jog_vd, self.jog_blocked = [0.0] * n, True
+            self.get_logger().error(f"jog stopped: tracking error {err / DEG:.1f} deg > "
+                                    f"{self.path_tol / DEG:.1f} (blocked? collision?)")
+            return
+        moving = [False] * n
+        for i in range(n):
+            lo, hi = self.limits[i]
+            lo, hi = lo + self.limit_margin, hi - self.limit_margin
+            if cancel:
+                self.jog_goal[i] = None
+            if steps[i]:
+                base = s[i] if self.jog_goal[i] is None else self.jog_goal[i]
+                self.jog_goal[i] = min(hi, max(lo, base + steps[i]))
+            goal = self.jog_goal[i]
+            if goal is not None:
+                e = goal - s[i]
+                want = math.copysign(min(step_vel[i], math.sqrt(2 * a * abs(e))), e)
+            else:
+                want = vd[i]
+            vi = v[i] + max(-a * dt, min(a * dt, want - v[i]))
+            if goal is not None:        # brake in time for the step target ...
+                cap = math.sqrt(2 * a * abs(goal - s[i]))
+                vi = max(-cap, min(cap, vi)) if (goal - s[i]) * vi > 0 else vi
+            if vi > 0:                  # ... and for the drive limits
+                vi = min(vi, math.sqrt(2 * a * max(0.0, hi - s[i])))
+            elif vi < 0:
+                vi = max(vi, -math.sqrt(2 * a * max(0.0, s[i] - lo)))
+            si = s[i] + vi * dt
+            si = min(si, max(hi, s[i])) if vi > 0 else max(si, min(lo, s[i]))
+            if goal is not None and ((goal - si) * (goal - s[i]) <= 0 or abs(goal - si) < 1e-5):
+                si, vi, self.jog_goal[i] = goal, 0.0, None
+            s[i], v[i] = si, vi
+            moving[i] = vi != 0.0 or self.jog_goal[i] is not None
+        for i, node in enumerate(self.nodes):
+            if moving[i] or self.jog_moving[i]:      # once more after stopping: final target
+                # lead the setpoint, but by no more than its braking distance (in steps of dt):
+                # the target then never moves back while braking, so the drive does not overshoot
+                lead = max(0.0, min(abs(v[i]) * self.lookahead,
+                                    v[i] * v[i] / (2 * a) - abs(v[i]) * dt / 2))
+                lo, hi = self.limits[i]
+                lo, hi = min(lo + self.limit_margin, s[i]), max(hi - self.limit_margin, s[i])
+                if self.jog_goal[i] is not None:        # never past the step target
+                    lo, hi = sorted((s[i], self.jog_goal[i]))
+                tgt = min(hi, max(lo, s[i] + math.copysign(lead, v[i])))
+                # setpoint speed plus a catch-up term for how far the drive lags behind it
+                lag = (s[i] - q[i]) * (1.0 if v[i] > 0 else -1.0) if v[i] else abs(s[i] - q[i])
+                vel = min(self.max_vel, max(0.2 * DEG, abs(v[i]) + lag / self.lookahead))
+                ds402.send_target(node, self.to_mdeg(i, tgt), vel / DEG * 1000.0)
+        self.jog_moving = moving
+        if not any(moving) and not any(vd):
+            self.jog_s = None
+
     # ---------- action ----------
     def on_goal(self, goal):
         ok, why = self.check_goal(goal.trajectory)
@@ -339,6 +496,8 @@ class Lwa4pDriver(Node):
     def check_goal(self, jt):
         if not self.enabled:
             return False, "drives not enabled (call ~/enable)"
+        if self.jog_s is not None:
+            return False, "arm is being jogged"
         if sorted(jt.joint_names) != sorted(self.joint_names):
             return False, f"joint names {list(jt.joint_names)} != {self.joint_names}"
         if not jt.points:
