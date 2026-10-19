@@ -23,5 +23,6 @@ lwa4p_driver:
     effort_scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     effort_alpha: 0.5               # weight of each new torque sample (1.0 = no smoothing)
     diagnostics_rate_hz: 1.0
+    status_log_period_s: 2.0        # print joint status to the terminal (0 = off)
     temperature_warn_c: 60.0        # 0x200D.1 module temperature; the modules' own limit looks like 80 C
     temperature_error_c: 75.0

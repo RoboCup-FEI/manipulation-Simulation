@@ -31,6 +31,7 @@ class GripperNode(Node):
         self.open_gap = p("open_gap_mm", 30.0).value
         rate = p("state_rate_hz", 10.0).value
         diag_rate = p("diagnostics_rate_hz", 1.0).value
+        log_period = p("status_log_period_s", 2.0).value
 
         self.lock = threading.Lock()
         self.wsg = WSG(self.channel)
@@ -51,6 +52,9 @@ class GripperNode(Node):
         self.create_timer(1.0 / rate, self.publish, callback_group=cb)
         self.diag_pub = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
         self.create_timer(1.0 / diag_rate, self.publish_diagnostics, callback_group=cb)
+        self.last_diag = None
+        if log_period > 0:
+            self.create_timer(log_period, self.log_status, callback_group=cb)
         self.create_service(Trigger, "~/home", self.srv_home, callback_group=cb)
         self.create_service(Trigger, "~/open", self.srv_open, callback_group=cb)
         self.create_service(Trigger, "~/stop", self.srv_stop, callback_group=cb)
@@ -125,6 +129,18 @@ class GripperNode(Node):
         arr.header.stamp = self.get_clock().now().to_msg()
         arr.status = [st]
         self.diag_pub.publish(arr)
+        self.last_diag = st
+
+    def log_status(self):
+        st = self.last_diag
+        if st is None:
+            return
+        v = {kv.key: kv.value for kv in st.values}
+        msg = (f"status: {st.message} | gap {v['gap_mm']} mm, force {v['force_n']} N, "
+               f"{v['temperature_c']} C")
+        log = self.get_logger()
+        (log.error if st.level >= DiagnosticStatus.ERROR else
+         log.warn if st.level >= DiagnosticStatus.WARN else log.info)(msg)
 
     def prepare(self):
         flags, names = self.wsg.system_state()

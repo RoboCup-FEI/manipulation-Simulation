@@ -244,6 +244,16 @@ Then plan and execute in RViz, or run your `simple_moveit.py` scripts. They use 
 
 ### 📡 Feedback topics
 
+The driver and the gripper node also print their status to the launch terminal every 2 s (`status_log_period_s` in `driver.yaml` / `gripper.yaml`, `0` = off). The line is INFO when all is OK, and WARN/ERROR when a joint or the gripper is faulted, too hot, or not responding:
+
+```
+[lwa4p_driver]: status: drives enabled
+  arm_1      0.00 deg   31.2 C  torque   -1.1% (peak  +49.0%)  ~0.35 A  operation enabled
+  ...
+  arm_5    -50.00 deg   45.6 C  torque  +16.4% (peak  +21.6%)  ~0.23 A  operation enabled
+[gripper]: status: HOLDING | gap -13.8 mm, force 35.4 N, 44.9 C
+```
+
 | Topic | Content |
 |---|---|
 | `/joint_states` | `position` (rad), `velocity` (rad/s, from position), `effort` = drive torque as a fraction of rated torque (× `effort_scale` in `driver.yaml`), each joint updated ~3 Hz and smoothed |

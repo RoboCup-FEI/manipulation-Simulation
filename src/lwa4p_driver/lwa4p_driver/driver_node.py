@@ -73,6 +73,7 @@ class Lwa4pDriver(Node):
         self.effort_scale = list(p("effort_scale", [1.0] * 6).value)
         self.effort_alpha = p("effort_alpha", 0.5).value
         diag_rate = p("diagnostics_rate_hz", 1.0).value
+        log_period = p("status_log_period_s", 2.0).value
         self.temp_warn = p("temperature_warn_c", 60.0).value
         self.temp_error = p("temperature_error_c", 75.0).value
         controller = p("controller_name", "arm_controller").value
@@ -125,6 +126,9 @@ class Lwa4pDriver(Node):
         self.pub = self.create_publisher(JointState, "joint_states", 10)
         self.diag_pub = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
         self.create_timer(1.0 / diag_rate, self.publish_diagnostics, callback_group=cb)
+        self.last_diag = None
+        if log_period > 0:
+            self.create_timer(log_period, self.log_status, callback_group=cb)
         self.create_service(Trigger, "~/enable", self.srv_enable, callback_group=cb)
         self.create_service(Trigger, "~/disable", self.srv_disable, callback_group=cb)
         self.create_service(Trigger, "~/reset", self.srv_reset, callback_group=cb)
@@ -344,6 +348,30 @@ class Lwa4pDriver(Node):
         arr.status.append(drv)
         arr.status += [self.joint_diagnostics(i) for i in range(len(self.nodes))]
         self.diag_pub.publish(arr)
+        self.last_diag = arr
+
+    def log_status(self):
+        arr = self.last_diag
+        if arr is None:
+            return
+        drv, joints = arr.status[0], arr.status[1:]
+        lines = [f"status: drives {drv.message}"]
+        for s in joints:
+            v = {kv.key: kv.value for kv in s.values}
+            name = s.name.split(": ", 1)[-1].replace("_joint", "")
+            if not v:                       # no response from the drive
+                lines.append(f"  {name}  {s.message}")
+                continue
+            line = f"  {name}  {v['position_deg']:>8} deg  {v['temperature_c']:>5} C"
+            if "torque_mean_pct" in v:
+                line += (f"  torque {v['torque_mean_pct']:>6}% (peak {v['torque_peak_pct']:>6}%)"
+                         f"  ~{v['current_est_a']} A")
+            lines.append(f"{line}  {s.message}")
+        level = max(s.level for s in arr.status)
+        log = self.get_logger()
+        out = (log.error if level >= DiagnosticStatus.ERROR else
+               log.warn if level >= DiagnosticStatus.WARN else log.info)
+        out("\n".join(lines))
 
     def joint_diagnostics(self, i):
         n = self.nodes[i]

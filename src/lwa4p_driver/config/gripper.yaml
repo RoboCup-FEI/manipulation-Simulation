@@ -9,3 +9,4 @@ gripper:
     open_gap_mm: 85.0
     state_rate_hz: 10.0
     diagnostics_rate_hz: 1.0
+    status_log_period_s: 2.0        # print gripper status to the terminal (0 = off)
