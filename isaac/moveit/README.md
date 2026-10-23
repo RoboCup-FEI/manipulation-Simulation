@@ -1,55 +1,56 @@
-# LWA4P + WSG 50 в Isaac Sim с MoveIt 2 Humble
+# LWA4P + WSG 50 in Isaac Sim with MoveIt 2 Humble
 
-Из корня репозитория `lwa4p_driver`:
+From the root of the `lwa4p_driver` repository:
 
 ```bash
 ./isaac/moveit/run.sh
 ```
 
-Откроются Isaac Sim с физической моделью руки и RViz с панелью MotionPlanning.
-Дождитесь сообщения `Physical robot ready` в терминале. В RViz:
+This opens Isaac Sim with the physical arm model and RViz with the MotionPlanning
+panel. Wait for `Physical robot ready` in the terminal. In RViz:
 
-1. Выберите Planning Group **arm**.
-2. Выберите Goal State **ready**, **home**, **work1**, **work2** либо переместите маркер TCP.
-3. Нажмите **Plan**, затем **Execute** или **Plan & Execute**.
-4. Для захвата выберите группу **gripper**, состояние **open** или **closed**.
+1. Select Planning Group **arm**.
+2. Select Goal State **ready**, **home**, **work1**, or **work2**, or move the TCP marker.
+3. Click **Plan**, then **Execute**, or **Plan & Execute**.
+4. For the gripper, select group **gripper** and state **open** or **closed**.
 
-Траектория двигает робот в окне Isaac. RViz получает измеренные состояния
-суставов от симулятора. Ctrl+C в терминале или закрытие Isaac останавливает
-связку. Для нового сеанса после Play/Stop запустите команду заново.
+Executing a trajectory moves the robot in Isaac. RViz receives measured joint
+states from the simulator. Press Ctrl+C in the terminal or close Isaac to stop
+the session. To start a new session after Play/Stop, run the command again.
 
-Другие режимы:
+Other modes:
 
 ```bash
-./isaac/moveit/run.sh --no-rviz   # окно Isaac, MoveIt без RViz
-./isaac/moveit/run.sh --headless  # оба процесса без окон
-./isaac/moveit/run.sh --test      # конечный тест исполнения и остановка
+./isaac/moveit/run.sh --no-rviz   # Isaac GUI, MoveIt without RViz
+./isaac/moveit/run.sh --headless  # no GUI windows
+./isaac/moveit/run.sh --test      # run the execution test, then stop
 ```
 
-Используются установленный Sim 6.2 и образ `lwa4p:humble`. Если образа нет,
-запускатель собирает его из `docker/Dockerfile`. Конфигурации
-подключаются в контейнер напрямую; их изменение не требует пересборки образа.
+The launcher uses an existing Sim 6.2 installation and the `lwa4p:humble` image.
+If the image is missing, it builds it from `docker/Dockerfile`. Configuration
+files are mounted directly into the container; changing them requires no image
+rebuild.
 
-Все скрипты запуска входят в этот репозиторий. Для произвольного расположения
-самостоятельной установки Sim задайте `ISAACSIM_PATH`:
+All launch scripts are included in this repository. To use a standalone Sim
+installation at a custom location, set `ISAACSIM_PATH`:
 
 ```bash
 ISAACSIM_PATH=/path/to/isaac-sim-6.2.0 ./isaac/moveit/run.sh
 ```
 
-По умолчанию проверяются соседняя установка
-`../isaac-setup/runtime/isaac-sim-6.2.0` и `~/isaacsim`.
-Дистрибутив Isaac в Git не включён. В общей папке RoboCup также сохранён
-совместимый запуск `./isaac-setup/lwa4p-moveit.sh`.
+By default, the launcher checks the sibling installation at
+`../isaac-setup/runtime/isaac-sim-6.2.0`, then `~/isaacsim`.
+The Isaac distribution is not included in Git. The shared RoboCup workspace also
+provides the compatibility launcher `./isaac-setup/lwa4p-moveit.sh`.
 
-По умолчанию: **ROS_DOMAIN_ID=68**, Fast DDS, часы симуляции. Другой домен:
+Defaults: **ROS_DOMAIN_ID=68**, Fast DDS, and simulation time. To use another domain:
 
 ```bash
 ROS_DOMAIN_ID=69 ./isaac/moveit/run.sh
 ```
 
-Используйте один экземпляр на домен. Наблюдение из другого терминала с
-нативным Humble:
+Run one instance per domain. To inspect it from another terminal with a native
+Humble installation:
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -58,75 +59,74 @@ ros2 control list_controllers
 ros2 topic echo /joint_states
 ```
 
-## Подключение
+## Architecture
 
 ```mermaid
 flowchart LR
-    RViz --> MoveIt[MoveIt 2 Humble в Docker]
-    MoveIt -->|FollowJointTrajectory| CM[ControllerManager внутри Isaac]
-    CM -->|position commands| PhysX[LWA4P и два физических пальца]
+    RViz --> MoveIt[MoveIt 2 Humble in Docker]
+    MoveIt -->|FollowJointTrajectory| CM[ControllerManager inside Isaac]
+    CM -->|position commands| PhysX[LWA4P and two physical fingers]
     PhysX -->|joint_states| MoveIt
-    PhysX -->|joint_states через robot_state_publisher| RViz
+    PhysX -->|joint_states via robot_state_publisher| RViz
 ```
 
-`arm_controller` и `gripper_controller` — стандартные
-`joint_trajectory_controller/JointTrajectoryController`. Они и
-`joint_state_broadcaster` работают в `isaacsim.ros2.control` через настоящий
-аппаратный интерфейс `isaacsim_ros2_control/IsaacSimSystem`.
-MoveIt, robot_state_publisher и RViz запускаются в Ubuntu 22.04/Humble
-контейнере; симулятор с Python 3.12 — на хосте.
+`arm_controller` and `gripper_controller` are standard
+`joint_trajectory_controller/JointTrajectoryController` instances. Together with
+`joint_state_broadcaster`, they run in `isaacsim.ros2.control` using the
+`isaacsim_ros2_control/IsaacSimSystem` hardware interface.
+MoveIt, robot_state_publisher, and RViz run in an Ubuntu 22.04/Humble container;
+the simulator runs on the host with Python 3.12.
 
-Планирование и физика используют одну модель из `isaac/lwa4p_wsg50.urdf`.
-`prepare.py` генерирует ROS-описание с `file://` URI для STL и адаптирует SRDF.
-Шесть осей руки сохранены. У захвата два независимых сустава:
-`gripper_finger_left_joint`, `gripper_finger_right_joint`; каждый открывается
-до 0.0425 м, общий зазор — 0.085 м. Виртуальный `gripper_joint` из конфигурации
-реального WSG здесь не используется. Конфигурации реального драйвера и Gazebo
-не изменены.
+Planning and physics use the same model from `isaac/lwa4p_wsg50.urdf`.
+`prepare.py` generates the ROS description with `file://` URIs for STL meshes and
+adapts the SRDF. All six arm joints are preserved. The gripper has two independent
+joints: `gripper_finger_left_joint` and `gripper_finger_right_joint`. Each opens
+to 0.0425 m, giving a total gap of 0.085 m. The virtual `gripper_joint` from the
+real WSG configuration is not used here. The real driver and Gazebo
+configurations are unchanged.
 
-Стол есть как физический коллайдер в Isaac и collision object
-`isaac_workbench` в MoveIt. Родной live-exporter Sim 6.2 отвергает модель с
-отдельной неподвижной веткой камеры. Адаптер добавляет стандартный
-`<ros2_control>` блок в исходный URDF и вызывает тот же native backend.
-Этот вызов привязан к установленному API Sim 6.2; после обновления Sim
-повторите `--test`.
+The table is a physical collider in Isaac and the `isaac_workbench` collision
+object in MoveIt. Sim 6.2's native live exporter rejects the model's separate
+fixed camera branch. The adapter adds a standard `<ros2_control>` block to the
+source URDF and calls the same native backend. This call depends on the installed
+Sim 6.2 API; rerun `--test` after upgrading Sim.
 
-## Выполненная проверка — 23 октября 2026
+## Completed verification — October 23, 2026
 
-Команда `--test` успешно выполнила:
+The `--test` command successfully completed:
 
-- загрузку трёх контроллеров в `active`;
-- прямую траекторию руки с измеренным движением первой оси ≈ 0.12 рад;
-- проверку стола в сцене коллизий MoveIt;
-- **планирование и исполнение MoveIt для arm**: 24 точки, код `SUCCESS`, action `SUCCEEDED`;
-- физическое закрытие двух пальцев;
-- **планирование и исполнение MoveIt для gripper**: 24 точки, `SUCCESS` и `SUCCEEDED`.
+- activation of all three controllers;
+- a direct arm trajectory with measured first-axis movement of approximately 0.12 rad;
+- verification of the table in the MoveIt collision scene;
+- **MoveIt planning and execution for arm**: 24 points, result `SUCCESS`, action status `SUCCEEDED`;
+- physical closing of both fingers;
+- **MoveIt planning and execution for gripper**: 24 points, `SUCCESS` and `SUCCEEDED`.
 
-После исправления URI STL тест повторён с загруженной геометрией коллизий.
-Максимальная конечная ошибка сустава руки — около 0.0094 рад.
-[Отчёт с целевыми и измеренными позициями](verification/execution.json).
+After fixing the STL URIs, the test was repeated with collision geometry loaded.
+The maximum final arm joint error was approximately 0.0094 rad.
+[Report with target and measured positions](verification/execution.json).
 
-Графический запуск также проверен: оба окна открыты, RViz загрузил STL без
-ошибок ресурсов и выполнил Plan & Execute с результатом `SUCCEEDED`.
-[Отчёт GUI](verification/gui.json).
+The GUI launch was also verified: both windows opened, RViz loaded the STL meshes
+without resource errors, and Plan & Execute completed with `SUCCEEDED`.
+[GUI report](verification/gui.json).
 
-Логи и сгенерированные ресурсы: `isaac/moveit/.runtime/` —
-`simulation.log`, `moveit.log`, `execution.log`, `robot.urdf`, `robot.srdf`, USD.
-Каталог исключён из Git. Расположение можно изменить через
-`LWA4P_ISAAC_CACHE`; последний отчёт исполнения сохраняется под
-`$LWA4P_ISAAC_CACHE/reports/`. Проверочные отчёты в `verification/` являются
-историческими результатами выполненной интеграции, а не новым запуском.
-Проверены свободное движение руки и управление захватом; физический захват
-предметов и RGB/depth в этот сценарий не входят. Корпус D435 сохранён.
+Logs and generated resources are stored in `isaac/moveit/.runtime/`:
+`simulation.log`, `moveit.log`, `execution.log`, `robot.urdf`, `robot.srdf`, and USD.
+This directory is excluded from Git. Override its location with
+`LWA4P_ISAAC_CACHE`; the latest execution report is saved under
+`$LWA4P_ISAAC_CACHE/reports/`. Reports in `verification/` record previous
+integration runs; they are not results of a new launch.
+Free arm movement and gripper control have been verified. Physical object
+grasping and RGB/depth are outside this scenario. The D435 housing is preserved.
 
-В установленном MoveIt 2.5.10 зафиксирован `SIGSEGV` при завершении
-`move_group` после SIGINT, в деструкторе `rclcpp::CallbackGroup`. В проверенных
-сеансах это происходило после успешного исполнения, при остановке; запускатель
-удаляет контейнер и завершает Isaac. Стек сохранён в `moveit.log`.
-Этот дефект завершения данной интеграцией не исправлен.
+The installed MoveIt 2.5.10 exhibited a `SIGSEGV` when `move_group` shut down after
+SIGINT, in the `rclcpp::CallbackGroup` destructor. In the verified sessions, this
+occurred during shutdown after successful execution; the launcher removes the
+container and stops Isaac. The stack trace is saved in `moveit.log`.
+This integration does not fix that shutdown defect.
 
-На ноутбуке остаются ограничения 16 ГБ RAM / 8 ГБ VRAM. Используются четыре
-потока, небольшая сцена и RViz с программным OpenGL. Первый прогрев шейдеров
-может занимать несколько минут.
+The laptop remains limited to 16 GB RAM and 8 GB VRAM. The setup uses four
+threads, a small scene, and RViz with software OpenGL. Initial shader warmup
+may take several minutes.
 
-Основа: [официальный ROS 2 Control workflow Sim 6.2](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/ros2_tutorials/robot_control/tutorial_ros2_control.html).
+Based on the [official Sim 6.2 ROS 2 Control workflow](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/ros2_tutorials/robot_control/tutorial_ros2_control.html).
