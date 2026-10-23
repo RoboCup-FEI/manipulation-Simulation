@@ -1,0 +1,63 @@
+{
+  "success": true,
+  "checked_at": "2026-10-23T16:58:45.812413+00:00",
+  "controllers": {
+    "gripper_controller": "active",
+    "arm_controller": "active",
+    "joint_state_broadcaster": "active"
+  },
+  "direct_controller": {
+    "target": {
+      "arm_1_joint": 0.11985284349531866,
+      "arm_2_joint": -0.36153027415275574,
+      "arm_3_joint": 0.8053160309791565,
+      "arm_4_joint": 0.00015511618403252214,
+      "arm_5_joint": 1.9998221397399902,
+      "arm_6_joint": 2.5478701104475476e-07
+    },
+    "measured": {
+      "arm_1_joint": 0.1194269210100174,
+      "arm_2_joint": -0.36737093329429626,
+      "arm_3_joint": 0.8079833388328552,
+      "arm_4_joint": 0.00024716826737858355,
+      "arm_5_joint": 1.9997085332870483,
+      "arm_6_joint": -7.025444119790336e-07
+    },
+    "movement": 0.11957407751469873
+  },
+  "workbench_in_planning_scene": true,
+  "moveit": {
+    "action_status": 4,
+    "error_code": 1,
+    "planned_points": 24,
+    "target": {
+      "arm_1_joint": 0.31970801651477815,
+      "arm_2_joint": -0.3673737347126007,
+      "arm_3_joint": 0.8079848289489746,
+      "arm_4_joint": 0.10024411105550826,
+      "arm_5_joint": 1.999707818031311,
+      "arm_6_joint": -4.4780182406611857e-07
+    },
+    "measured": {
+      "arm_1_joint": 0.31822359561920166,
+      "arm_2_joint": -0.37675318121910095,
+      "arm_3_joint": 0.8068076968193054,
+      "arm_4_joint": 0.10226789861917496,
+      "arm_5_joint": 2.0044994354248047,
+      "arm_6_joint": 0.0029224813915789127
+    }
+  },
+  "gripper_closed": {
+    "gripper_finger_left_joint": 0.008578307926654816,
+    "gripper_finger_right_joint": 0.009895924478769302
+  },
+  "gripper_moveit": {
+    "action_status": 4,
+    "error_code": 1,
+    "planned_points": 24
+  },
+  "gripper_open": {
+    "gripper_finger_left_joint": 0.04124332591891289,
+    "gripper_finger_right_joint": 0.04276321828365326
+  }
+}
