@@ -1,0 +1,24 @@
+BasedOnStyle: Google
+ColumnLimit: 100
+IndentWidth: 2
+ContinuationIndentWidth: 2
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
+AccessModifierOffset: -2
+PointerAlignment: Middle
+DerivePointerAlignment: false
+SortIncludes: false
+NamespaceIndentation: None
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterStruct: true
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterControlStatement: MultiLine
+  BeforeLambdaBody: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: None
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerIndentWidth: 2

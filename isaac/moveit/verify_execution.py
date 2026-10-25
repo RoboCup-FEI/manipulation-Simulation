@@ -71,10 +71,18 @@ try:
     cm = node.create_client(ListControllers, "/controller_manager/list_controllers")
     if not cm.wait_for_service(timeout_sec=60):
         raise RuntimeError("ControllerManager unavailable")
-    controllers = future_result(cm.call_async(ListControllers.Request()))
-    report["controllers"] = {item.name: item.state for item in controllers.controller}
-    assert all(report["controllers"].get(name) == "active" for name in
-               ("joint_state_broadcaster", "arm_controller", "gripper_controller"))
+    # The broadcaster can publish before the arm/finger spawners finish.
+    # Wait for actual lifecycle state instead of racing the first joint message.
+    controller_deadline = time.monotonic() + 120
+    while True:
+        controllers = future_result(cm.call_async(ListControllers.Request()))
+        report["controllers"] = {item.name: item.state for item in controllers.controller}
+        if all(report["controllers"].get(name) == "active" for name in
+               ("joint_state_broadcaster", "arm_controller", "gripper_controller")):
+            break
+        if time.monotonic() >= controller_deadline:
+            raise TimeoutError(f"Controllers did not activate: {report['controllers']}")
+        rclpy.spin_once(node, timeout_sec=.2)
     initial = {name: state[name] for name in ARM}
     target = dict(initial)
     target[ARM[0]] += .12
@@ -90,10 +98,16 @@ try:
         raise RuntimeError("MoveIt planning scene service unavailable")
     request = GetPlanningScene.Request()
     request.components.components = PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
-    scene = future_result(scene_client.call_async(request)).scene
-    report["workbench_in_planning_scene"] = any(
-        item.id == "isaac_workbench" for item in scene.world.collision_objects)
-    assert report["workbench_in_planning_scene"], "Workbench missing from MoveIt collision scene"
+    scene_deadline = time.monotonic() + 60
+    while True:
+        scene = future_result(scene_client.call_async(request)).scene
+        report["workbench_in_planning_scene"] = any(
+            item.id == "isaac_workbench" for item in scene.world.collision_objects)
+        if report["workbench_in_planning_scene"]:
+            break
+        if time.monotonic() >= scene_deadline:
+            raise TimeoutError("Workbench missing from MoveIt collision scene")
+        rclpy.spin_once(node, timeout_sec=.2)
 
     target = {name: state[name] for name in ARM}
     target[ARM[0]] += .2

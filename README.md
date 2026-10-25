@@ -144,6 +144,21 @@ alias lwa='source /opt/ros/humble/setup.bash && source ~/lwa4p_ws/install/setup.
 
 ## 🌍 Simulation
 
+### Isaac Sim 6.2 with MoveIt and MTC
+
+Run from the repository root:
+
+```bash
+./isaac/moveit/run.sh          # Isaac GUI and RViz
+./isaac/moveit/run.sh --test   # automated checks without GUI; exits when finished
+```
+
+Use `--no-rviz` to open only the Isaac window. To watch an MTC motion test,
+follow the [two-terminal GUI test instructions](isaac/moveit/README.md#test-mtc-in-the-isaac-gui).
+The [Isaac setup guide](isaac/moveit/README.md) covers installation paths and reports.
+
+### Gazebo Classic
+
 ```bash
 ros2 launch lwa4p_gazebo gazebo.launch.py gui:=false     # RViz only (light)
 ros2 launch lwa4p_gazebo gazebo.launch.py                # + Gazebo window

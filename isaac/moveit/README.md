@@ -23,13 +23,16 @@ Other modes:
 ```bash
 ./isaac/moveit/run.sh --no-rviz   # Isaac GUI, MoveIt without RViz
 ./isaac/moveit/run.sh --headless  # no GUI windows
-./isaac/moveit/run.sh --test      # run the execution test, then stop
+./isaac/moveit/run.sh --test      # automated checks without GUI; exits when finished
 ```
 
-The launcher uses an existing Sim 6.2 installation and the `lwa4p:humble` image.
-If the image is missing, it builds it from `docker/Dockerfile`. Configuration
-files are mounted directly into the container; changing them requires no image
-rebuild.
+**`--test` always runs without GUI.** It verifies MoveIt, MTC, measured motion,
+and `BUSY`, then stops the simulator and container. To watch the robot move,
+use [Test MTC in the Isaac GUI](#test-mtc-in-the-isaac-gui).
+
+The launcher uses an existing Sim 6.2 installation and builds `lwa4p:humble`
+from `docker/Dockerfile`, reusing cached layers. This keeps compiled packages,
+including MTC, in sync with `src/`. Configuration files are mounted directly.
 
 All launch scripts are included in this repository. To use a standalone Sim
 installation at a custom location, set `ISAACSIM_PATH`:
@@ -58,6 +61,45 @@ export ROS_DOMAIN_ID=68 ROS_LOCALHOST_ONLY=0 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 ros2 control list_controllers
 ros2 topic echo /joint_states
 ```
+
+## Test MTC in the Isaac GUI
+
+**Terminal 1 (host, repository root):** start Isaac with its GUI.
+
+```bash
+./isaac/moveit/run.sh --no-rviz
+```
+
+Wait for `Physical robot ready` in the terminal. Initial shader warmup may take
+several minutes. Use `./isaac/moveit/run.sh` instead to also open RViz.
+
+**Terminal 2 (host):** call the MTC test service in the running Humble container.
+This command selects the container started by Terminal 1; keep one such session running.
+
+```bash
+docker exec "$(docker ps -q --filter name=lwa4p-isaac-moveit-)" \
+  /usr/local/bin/lwa4p-entrypoint \
+  ros2 service call /lwa4p/test_ptp std_srvs/srv/Trigger '{}'
+```
+
+Watch the robot in Isaac: the arm moves, the fingers close, the arm returns,
+and the fingers open. The service responds after execution and measured joint
+checks. Success returns `success: true` and `MTC motion verified: <report path>`.
+The GUI remains open; press **Ctrl+C in Terminal 1** to stop the session.
+
+A concurrent call returns `success: false` with message `BUSY`. The single ROS
+executor continues processing callbacks while a worker executes the task.
+
+This is a simulation verification utility. It expects the two physical finger
+joints and does not test object grasping. Its report is `.runtime/mtc.json`;
+`--test` also copies both test reports into `.runtime/reports/`.
+See [package structure](../../src/lwa4p_mtc_verification/README.md).
+
+On October 25, 2026, `--test` passed with native Isaac 6.2 and Humble in Docker:
+MoveIt execution, the full MTC sequence, measured arm/finger motion, and `BUSY`.
+The first arm joint moved 0.1200 rad; maximum arm return error was 0.00592 rad.
+[Report and environment](verification/native_mtc.json). This run did not verify the GUI;
+the existing MoveIt shutdown fault described below recurred after successful checks.
 
 ## Architecture
 

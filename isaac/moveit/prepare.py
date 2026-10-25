@@ -22,6 +22,7 @@ def prepare():
         mesh.set("filename", mesh_path.as_uri())
     urdf.write(CACHE / "robot.urdf", encoding="unicode", xml_declaration=True)
     srdf = ET.parse(HERE.parents[1] / "src/lwa4p_moveit_config/config/lwa4p.srdf")
+    srdf.getroot().set('name', urdf.getroot().get('name'))
     gripper = srdf.find("group[@name='gripper']")
     for child in list(gripper):
         gripper.remove(child)

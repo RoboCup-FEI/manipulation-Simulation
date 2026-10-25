@@ -23,10 +23,9 @@ for arg in "$@"; do
 done
 # Validate the existing Python environment without starting a simulator.
 "$HERE/isaac.sh" python -c 'import sys; print("Isaac Python:", sys.version.split()[0])'
-if ! docker image inspect lwa4p:humble >/dev/null 2>&1; then
-    docker build --build-arg USER_UID="$(id -u)" --build-arg USER_GID="$(id -g)" \
-        -f "$REPOSITORY/docker/Dockerfile" -t lwa4p:humble "$REPOSITORY"
-fi
+# Reuse Docker's build cache while keeping the installed workspace in sync with src/.
+docker build --build-arg USER_UID="$(id -u)" --build-arg USER_GID="$(id -g)" \
+    -f "$REPOSITORY/docker/Dockerfile" -t lwa4p:humble "$REPOSITORY"
 python3 "$INTEGRATION/prepare.py"
 LWA4P_ISAAC_CACHE="$(cd "$LWA4P_ISAAC_CACHE" && pwd)"
 export LWA4P_ISAAC_CACHE
@@ -36,7 +35,9 @@ case "$LWA4P_ISAAC_CACHE/" in
     *) MOUNTS+=(--mount "type=bind,src=$LWA4P_ISAAC_CACHE,dst=$LWA4P_ISAAC_CACHE") ;;
 esac
 rm -f "$LWA4P_ISAAC_CACHE/simulation.json"
-if (( TEST )); then rm -f "$LWA4P_ISAAC_CACHE/execution.json"; fi
+if (( TEST )); then
+    rm -f "$LWA4P_ISAAC_CACHE/execution.json" "$LWA4P_ISAAC_CACHE/mtc.json"
+fi
 CONTAINER="lwa4p-isaac-moveit-$$"
 SIM_PID=""
 ROS_PID=""
@@ -69,7 +70,7 @@ if [[ "$RVIZ" == true ]]; then
     if [[ -n "${XAUTHORITY:-}" && -f "$XAUTHORITY" ]]; then
         DISPLAY_ARGS+=(-e XAUTHORITY=/tmp/isaac-rviz-xauthority
                       --mount "type=bind,src=$XAUTHORITY,dst=/tmp/isaac-rviz-xauthority,readonly")
-    elif ! xhost | rg -Fq "SI:localuser:$(id -un)"; then
+    elif ! xhost | grep -Fq "SI:localuser:$(id -un)"; then
         xhost "+si:localuser:$(id -un)" >/dev/null
         ADDED_XHOST=1
     fi
@@ -80,7 +81,7 @@ setsid env ISAAC_ROS_DISTRO=humble ROS_LOCALHOST_ONLY=0 \
     > "$LWA4P_ISAAC_CACHE/simulation.log" 2>&1 &
 SIM_PID=$!
 for ((second=0; second<900; second++)); do
-    if rg -q '\[LWA4P\] READY' "$LWA4P_ISAAC_CACHE/simulation.log"; then break; fi
+    if grep -Fq '[LWA4P] READY' "$LWA4P_ISAAC_CACHE/simulation.log"; then break; fi
     if ! kill -0 "$SIM_PID" 2>/dev/null; then
         tail -60 "$LWA4P_ISAAC_CACHE/simulation.log" >&2
         exit 1
@@ -108,9 +109,12 @@ if (( second == 30 )); then echo 'MoveIt container startup timed out.' >&2; exit
 if (( TEST )); then
     docker exec "$CONTAINER" /usr/local/bin/lwa4p-entrypoint \
         python3 "$INTEGRATION/verify_execution.py" | tee "$LWA4P_ISAAC_CACHE/execution.log"
+    docker exec "$CONTAINER" /usr/local/bin/lwa4p-entrypoint \
+        python3 "$INTEGRATION/check_ptp.py" | tee "$LWA4P_ISAAC_CACHE/mtc.log"
     mkdir -p "$REPORT_DIR"
     cp "$LWA4P_ISAAC_CACHE/execution.json" "$REPORT_DIR/lwa4p-moveit-execution.json"
-    echo "[LWA4P] Verification passed: $REPORT_DIR/lwa4p-moveit-execution.json"
+    cp "$LWA4P_ISAAC_CACHE/mtc.json" "$REPORT_DIR/lwa4p-mtc.json"
+    echo "[LWA4P] MoveIt and MTC verification passed; reports: $REPORT_DIR"
 else
     echo '[LWA4P] RViz: group arm → goal ready/home/work1/work2 → Plan & Execute.'
     echo '[LWA4P] Gripper: group gripper → open/closed. Ctrl+C stops both processes.'
