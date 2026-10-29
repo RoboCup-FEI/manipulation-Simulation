@@ -1,0 +1,5 @@
+# Target joint positions [rad], ordered as the joint_names parameter of the pose teacher
+float64[] positions
+---
+bool success
+string message
