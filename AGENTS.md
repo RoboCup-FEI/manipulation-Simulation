@@ -18,7 +18,7 @@ in sync when you change something. Read it before editing.
 - **ROS 2 Jazzy** on Ubuntu 24.04, with MoveIt 2 and MoveIt Task Constructor (MTC). The migration
   to Jazzy is in progress: read "Migration to Jazzy" below before building or running anything.
 - The repo is forked from `Tomas-Jurov/lwa4p_driver`. Git origin is
-  `github.com/RoboCup-FEI/manipulation-Simulation`, and the working branch is `isaac-setup`.
+  `github.com/RoboCup-FEI/manipulation-Simulation`, and the working branch is `main`.
 - The repo root **is** the colcon workspace (`src/` lives here). Build from this directory.
   `/heavy_stuff/robocup_ws` around it is not a git repo.
 - There is **no mobile base, navigation or task-level code** here yet. The `world` frame is
@@ -94,6 +94,8 @@ Repeat them before relying on them. Its Gazebo physics results do not carry over
 | `lwa4p_moveit_config` | ament_cmake | Setup Assistant output: SRDF, kinematics, joint limits, controllers. `demo.launch.py` (mock hardware), `real.launch.py` (driver + move_group + RViz). |
 | `lwa4p_gazebo` | ament_cmake + scripts | **To be removed (§7).** Gazebo world, `gazebo.launch.py`, sim controllers, and the Python user API `scripts/simple_moveit.py` plus the demos `go_to.py`, `pick_tube.py`, `bin_pick.py` and the sim helper `finger_mimic.py`. |
 | `lwa4p_mtc_verification` | ament_cmake C++17 | `verify_mtc` node: the `/lwa4p/test_ptp` Trigger service runs a 4-stage MTC task and checks the *measured* joint motion. Used for Isaac only. Follow its `.clang-format` (Google-based, 100 columns, Allman braces for functions, classes and namespaces). |
+| `lwa4p_calibration_poses` | ament_cmake C++17 | `pose_teacher` and `calibration_sequence` nodes: teach joint poses for hand-eye calibration and replay them. They send trajectories directly to the driver, **without MoveIt or collision checking**. Humble form of `create_service`; on Jazzy use `rclcpp::ServicesQoS()`. |
+| `lwa4p_calibration_interfaces` | ament_cmake | The `SendToPose` service definition. |
 | `isaac/` (not a ROS package) | scripts | Plain URDF `lwa4p_wsg50.urdf` with datasheet masses, its generator `tools/make_isaac_urdf.py`, the Isaac Lab template `lwa4p_cfg.py`, and the Isaac Sim 6.2 + MoveIt launcher `isaac/moveit/`. |
 
 The dependency chain is `description ← moveit_config`. `moveit_config` also depends
@@ -275,11 +277,12 @@ hung on Zenoh before the migration, so retest before changing this). Domain IDs 
 
 Match these when you attach a second terminal.
 
-**Tests.** There are **no unit or ament tests** in any package (no `test/` directories and no
-`ament_lint`). Verification today consists of:
+**Tests.** Only `lwa4p_calibration_poses` has unit tests (gtest for its logic layer), and no
+package uses `ament_lint`. Verification today consists of:
 1. the Dockerfile's build-time import and `--show-args` checks;
 2. `./isaac/moveit/run.sh --test` (needs a GPU and Isaac);
-3. manual runs on mock hardware: `demo.launch.py` + `go_to.py home`.
+3. manual runs on mock hardware: `demo.launch.py` + `go_to.py home`;
+4. `colcon test --packages-select lwa4p_calibration_poses`.
 
 The pure-logic code (`joint_motion_verification.cpp`, `Trajectory.sample` in the driver,
 `find_top_object` and `grasp_options` in `bin_pick.py`, `crc16` in `wsg50.py`) is the easiest
