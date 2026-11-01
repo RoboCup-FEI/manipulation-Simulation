@@ -5,12 +5,16 @@
 # Usage: source this file (e.g. from ~/.bashrc), then run calib-help.
 
 LWA4P_IMAGE="${LWA4P_IMAGE:-lwa4p:humble-calib}"
+LWA4P_CAMERA_IMAGE="${LWA4P_CAMERA_IMAGE:-realsense:humble}"
+LWA4P_ROS_DOMAIN_ID="${LWA4P_ROS_DOMAIN_ID:-43}"
+LWA4P_ROS_LOCALHOST_ONLY="${LWA4P_ROS_LOCALHOST_ONLY:-0}"
 LWA4P_POSE_DIR="${LWA4P_POSE_DIR:-$HOME/lwa4p_calibration}"
 LWA4P_POSE_FILE_NAME="${LWA4P_POSE_FILE_NAME:-calibration_poses.txt}"
 
 _CALIB_CONTAINER_POSE_DIR=/home/ros/calibration
 _CALIB_REAL_CONTAINER=lwa4p-real
 _CALIB_SIM_CONTAINER=lwa4p-light
+_CALIB_CAMERA_CONTAINER=lwa4p-camera
 
 _calib_container() {
   if [ -n "${LWA4P_CONTAINER:-}" ]; then
@@ -47,7 +51,7 @@ _calib_docker_run() {
   shift
   mkdir -p "$LWA4P_POSE_DIR"
   xhost +si:localuser:"$(id -un)" > /dev/null
-  docker run --rm -i $(_calib_tty_flag) --init --name "$container" --shm-size=512m \
+  docker run --rm -i $(_calib_tty_flag) --init --name "$container" --ipc host \
     -e DISPLAY="$DISPLAY" -e LIBGL_ALWAYS_SOFTWARE=1 \
     --mount type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix,readonly \
     --mount type=bind,src="$LWA4P_POSE_DIR",dst="$_CALIB_CONTAINER_POSE_DIR" \
@@ -56,13 +60,21 @@ _calib_docker_run() {
 
 calib-real() {
   local can_channel="${1:-can0}"
-  _calib_docker_run "$_CALIB_REAL_CONTAINER" --network host -e ROS_DOMAIN_ID=43 \
+  _calib_docker_run "$_CALIB_REAL_CONTAINER" --network host \
+    -e ROS_DOMAIN_ID="$LWA4P_ROS_DOMAIN_ID" -e ROS_LOCALHOST_ONLY="$LWA4P_ROS_LOCALHOST_ONLY" \
     "$LWA4P_IMAGE" ros2 launch lwa4p_moveit_config real.launch.py can_channel:="$can_channel"
 }
 
 calib-sim() {
   _calib_docker_run "$_CALIB_SIM_CONTAINER" \
     "$LWA4P_IMAGE" ros2 launch lwa4p_moveit_config demo.launch.py
+}
+
+calib-camera() {
+  docker run --rm -i $(_calib_tty_flag) --init --name "$_CALIB_CAMERA_CONTAINER" \
+    --network host --ipc host --privileged --mount type=bind,src=/dev,dst=/dev \
+    -e ROS_DOMAIN_ID="$LWA4P_ROS_DOMAIN_ID" -e ROS_LOCALHOST_ONLY="$LWA4P_ROS_LOCALHOST_ONLY" \
+    "$LWA4P_CAMERA_IMAGE" ros2 launch realsense2_camera rs_launch.py "$@"
 }
 
 calib-nodes() {
@@ -176,6 +188,7 @@ Calibration shortcuts (image $LWA4P_IMAGE, poses in $LWA4P_POSE_DIR/$LWA4P_POSE_
 Start (each in its own terminal):
   calib-real [can0]        driver + MoveIt + RViz on the real robot
   calib-sim                MoveIt + RViz with mock hardware (no robot)
+  calib-camera [args]      RealSense camera, extra args go to rs_launch.py
   calib-nodes              pose_teacher + calibration_sequence in the running container
 
 Real robot:
