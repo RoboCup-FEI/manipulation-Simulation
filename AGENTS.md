@@ -5,7 +5,6 @@ Notes for agents and developers working on this repository. The READMEs explain 
 in sync when you change something. Read it before editing.
 
 - User docs: [README.md](README.md), [docker/README.md](docker/README.md),
-  [src/lwa4p_gazebo/README.md](src/lwa4p_gazebo/README.md),
   [isaac/README.md](isaac/README.md), [isaac/moveit/README.md](isaac/moveit/README.md),
   [src/lwa4p_mtc_verification/README.md](src/lwa4p_mtc_verification/README.md).
 
@@ -16,7 +15,8 @@ in sync when you change something. Read it before editing.
 - The manipulation subsystem of a RoboCup (FEI) medical-assistance robot: a **Schunk LWA 4P**
   6-DoF arm, a **Weiss/Schunk WSG 50-110** parallel gripper, and a **RealSense D435** looking
   down at the work area.
-- **ROS 2 Humble only** (Ubuntu 22.04). MoveIt 2 (2.5.x) and Gazebo **Classic** 11.
+- **ROS 2 Jazzy** on Ubuntu 24.04, with MoveIt 2 and MoveIt Task Constructor (MTC). The migration
+  to Jazzy is in progress: read "Migration to Jazzy" below before building or running anything.
 - The repo is forked from `Tomas-Jurov/lwa4p_driver`. Git origin is
   `github.com/RoboCup-FEI/manipulation-Simulation`, and the working branch is `isaac-setup`.
 - The repo root **is** the colcon workspace (`src/` lives here). Build from this directory.
@@ -36,19 +36,52 @@ in sync when you change something. Read it before editing.
   behaviour tree) must not depend on which backend is running.
 - Navigation and VLM perception belong to other teams. This repo consumes their outputs
   (poses, TF) and does not implement them.
-- The planned stack is described in [manipulation_architecture.txt](manipulation_architecture.txt).
-  Its lower layers predate the driver decision. See **§13** for how to read it.
+- **BehaviorTree.CPP belongs to the AI team.** This team provides the ROS 2 actions it calls.
+  Failures from actions must propagate back to the BT, and this team defines the shared
+  failure enumeration.
+- **The project is migrating to ROS 2 Jazzy.** All new work targets Jazzy.
+- **Gazebo is abandoned in favour of Isaac Sim**, which is the only physics simulator. Mock
+  hardware covers everything that needs no physics. Do not port or extend Gazebo code (see §7).
+- The planned stack is the diagram in [manipulation_architecture.txt](manipulation_architecture.txt).
+  The proposed implementation is in
+  [manipulation_implementation_proposal.md](manipulation_implementation_proposal.md). See **§13**.
 
-### The host machine (checked 2026-10-26)
+### Migration to Jazzy (in progress)
 
-- Ubuntu **24.04** with ROS 2 **Jazzy** in `/opt/ros/jazzy`. The `.vscode` settings point at
-  Jazzy too.
-- Gazebo Classic plugins do not exist for Jazzy, so **do not try to build or run natively**.
-  Use the Docker image `lwa4p:humble` ([docker/Dockerfile](docker/Dockerfile)).
-- The NVIDIA driver was not working (`nvidia-smi` failed) and no Isaac Sim install was found
-  at `../isaac-setup/runtime/isaac-sim-6.2.0` or `~/isaacsim`. The Isaac flow cannot run
-  here unless that changes.
-- The `lwa4p:humble` image was not built yet.
+The repo has not been migrated yet. `docker/Dockerfile`, the launchers in `isaac/moveit/`, the
+READMEs, the Docker image tag and some source comments still name the previous ROS distribution.
+**Treat those references as out of date:** do not copy them into new work, and do not follow
+their instructions as if they were current. Sections below describe the code as it stands where
+they name specific packages, and everything must be rechecked on Jazzy.
+
+Checked against the Jazzy package index on 2026-11-01:
+
+| Area | State on Jazzy | What it means |
+|---|---|---|
+| MoveIt, MTC | Binaries exist (MoveIt 2.12.4, MTC 0.1.8) | APIs may differ from what this repo was written against. Rebuild `lwa4p_mtc_verification` and retest `simple_moveit.py`. |
+| Gazebo | Abandoned | Remove `lwa4p_gazebo` (§7). |
+| Controllers | `joint_trajectory_controller`, `gripper_controllers`, `forward_command_controller` exist | Recheck their YAML against the Jazzy versions. |
+| `warehouse_ros_mongo` | No binary | Listed in `lwa4p_moveit_config/package.xml`, unused. Remove it or skip it in `rosdep`. |
+| `pick_ik`, TRAC-IK plugin, `behaviortree_cpp` | Binaries exist | |
+| `behaviortree_ros2` | No binary | The AI team must build it from source if they use it. |
+| Isaac Sim | NVIDIA recommends Ubuntu 24.04 with Jazzy. `isaac/moveit/isaac.sh` accepts `jazzy`. | Not tested yet. `run.sh` hard-codes the old image tag and distribution, and `simulation.py` needs checking. Controller plugins come from `ros-jazzy-ros2-controllers`. |
+| Python | 3.12 | Recheck the `canopen` and `python-can` pins in `lwa4p_driver`. |
+
+The proposal targets Jazzy and Isaac Sim, but its measured results come from the previous stack.
+Repeat them before relying on them. Its Gazebo physics results do not carry over at all.
+
+### The host machine (checked 2026-11-01)
+
+- Ubuntu **24.04** with ROS 2 **Jazzy** in `/opt/ros/jazzy` and Python 3.12, matching the
+  project's target. The `.vscode` settings point at Jazzy too.
+- Installed: `ros2_control`, `joint_trajectory_controller` and `gripper_controllers`.
+  **Not installed:** MoveIt, MTC, `pick_ik`, `behaviortree_cpp`. Installing them
+  needs `sudo`, so ask first.
+- The `lwa4p` Docker image on this host was built from the unmigrated Dockerfile. Do not base new
+  work on it.
+- The GPU is a GTX 1650 Ti with 4 GB. No Isaac Sim install was found at
+  `../isaac-setup/runtime/isaac-sim-6.2.0` or `~/isaacsim`. This GPU has no RTX hardware, so
+  **Isaac cannot run here**: use mock hardware on this host, and an RTX machine for physics.
 
 ---
 
@@ -59,11 +92,11 @@ in sync when you change something. Read it before editing.
 | `lwa4p_description` | ament_cmake (data only) | Xacro for the arm, the WSG 50 (`wsg50.urdf.xacro`) and the D435 (`realsense_d435.urdf.xacro`), plus meshes and `display.launch.py`. The base xacro has **no camera**; the camera is added by `lwa4p_gazebo`. |
 | `lwa4p_driver` | ament_python | Real hardware. `driver` = CANopen CiA 402 arm driver (`driver_node.py` + `ds402.py`). `gripper` = WSG 50 node (`gripper_node.py` + `wsg50.py`, a raw binary protocol over CAN). CLIs `test_move` and `gripper_cmd`. Launch file: `bringup.launch.py`. |
 | `lwa4p_moveit_config` | ament_cmake | Setup Assistant output: SRDF, kinematics, joint limits, controllers. `demo.launch.py` (mock hardware), `real.launch.py` (driver + move_group + RViz). |
-| `lwa4p_gazebo` | ament_cmake + scripts | Gazebo world, `gazebo.launch.py`, sim controllers, and the Python user API `scripts/simple_moveit.py` plus the demos `go_to.py`, `pick_tube.py`, `bin_pick.py` and the sim helper `finger_mimic.py`. |
+| `lwa4p_gazebo` | ament_cmake + scripts | **To be removed (§7).** Gazebo world, `gazebo.launch.py`, sim controllers, and the Python user API `scripts/simple_moveit.py` plus the demos `go_to.py`, `pick_tube.py`, `bin_pick.py` and the sim helper `finger_mimic.py`. |
 | `lwa4p_mtc_verification` | ament_cmake C++17 | `verify_mtc` node: the `/lwa4p/test_ptp` Trigger service runs a 4-stage MTC task and checks the *measured* joint motion. Used for Isaac only. Follow its `.clang-format` (Google-based, 100 columns, Allman braces for functions, classes and namespaces). |
 | `isaac/` (not a ROS package) | scripts | Plain URDF `lwa4p_wsg50.urdf` with datasheet masses, its generator `tools/make_isaac_urdf.py`, the Isaac Lab template `lwa4p_cfg.py`, and the Isaac Sim 6.2 + MoveIt launcher `isaac/moveit/`. |
 
-The dependency chain is `description ← moveit_config ← gazebo`. `moveit_config` also depends
+The dependency chain is `description ← moveit_config`. `moveit_config` also depends
 on `lwa4p_driver` at exec time, because `real.launch.py` includes `bringup.launch.py`.
 
 ---
@@ -74,21 +107,21 @@ All backends expose `arm_controller` and `gripper_controller` and publish `/join
 MoveIt client code is meant to be backend-agnostic. **The gripper is modelled differently in
 each backend.** Getting this wrong is the most likely bug.
 
-| | Real robot | Gazebo Classic | Isaac Sim 6.2 | Mock (`demo.launch.py`) |
-|---|---|---|---|---|
-| Arm action | `/arm_controller/follow_joint_trajectory`, served by the Python driver | JTC via gazebo_ros2_control, PID force-driven | JTC in Isaac's in-process `controller_manager` | JTC, mock_components |
-| Gripper joint(s) MoveIt commands | `gripper_joint` = **fingertip gap** (m) | `gripper_joint` (gap) | **`gripper_finger_left_joint` + `gripper_finger_right_joint`**, each = gap/2. There is **no `gripper_joint`**. | `gripper_joint` |
-| Gripper controller type | **GripperCommand** action `gripper_controller/gripper_cmd` (served by `gripper_node`) | **FollowJointTrajectory** (JTC on `gripper_joint`), then `finger_mimic.py` drives `finger_controller` (ForwardCommand) | FollowJointTrajectory on the two finger joints | `GripperActionController` |
-| MoveIt controllers file | `lwa4p_moveit_config/config/moveit_controllers.yaml` | `lwa4p_gazebo/config/moveit_controllers.yaml` | `isaac/moveit/moveit_controllers.yaml` | moveit_config |
-| URDF used | `lwa4p_description/urdf/lwa4p.urdf.xacro` (mimic fingers) | `lwa4p_gazebo/urdf/lwa4p_gazebo.urdf.xacro` (+ camera, ros2_control, PID gains) | `isaac/lwa4p_wsg50.urdf` → `.runtime/robot.urdf` (mesh paths rewritten as `file://`) | moveit_config xacro |
-| SRDF | `config/lwa4p.srdf` | the same | **rewritten** by `isaac/moveit/prepare.py`: the gripper group becomes the 2 finger joints, gripper states are split into gap/2, and a `ready` arm state is added | the same |
-| `use_sim_time` | no | yes | yes | no |
-| Gravity on the arm | real | **off** (`turnGravityOff` on every robot link) | on, with stiff drives | n/a |
-| Camera | not integrated yet (no realsense2 launch) | simulated D435 depth sensor | D435 frame only, no RGB-D published | none |
+| | Real robot | Isaac Sim 6.2 | Mock (`demo.launch.py`) |
+|---|---|---|---|
+| Arm action | `/arm_controller/follow_joint_trajectory`, served by the Python driver | JTC in Isaac's in-process `controller_manager` | JTC, mock_components |
+| Gripper joint(s) MoveIt commands | `gripper_joint` = **fingertip gap** (m) | **`gripper_finger_left_joint` + `gripper_finger_right_joint`**, each = gap/2. There is **no `gripper_joint`**. | `gripper_joint` |
+| Gripper controller type | **GripperCommand** action `gripper_controller/gripper_cmd` (served by `gripper_node`) | FollowJointTrajectory on the two finger joints | `GripperActionController` |
+| MoveIt controllers file | `lwa4p_moveit_config/config/moveit_controllers.yaml` | `isaac/moveit/moveit_controllers.yaml` | moveit_config |
+| URDF used | `lwa4p_description/urdf/lwa4p.urdf.xacro` (mimic fingers) | `isaac/lwa4p_wsg50.urdf` → `.runtime/robot.urdf` (mesh paths rewritten as `file://`) | moveit_config xacro |
+| SRDF | `config/lwa4p.srdf` | **rewritten** by `isaac/moveit/prepare.py`: the gripper group becomes the 2 finger joints, gripper states are split into gap/2, and a `ready` arm state is added | the same |
+| `use_sim_time` | no | yes | no |
+| Gravity on the arm | real | on, with stiff drives | n/a |
+| Camera | not integrated yet (no realsense2 launch) | D435 frame only, no RGB-D published | none |
 
 Consequences:
 - `SimpleMoveIt.gripper(gap)` sets a joint constraint on `gripper_joint`. It works on the real
-  robot, in Gazebo and in mock mode, but **not in Isaac**. Code meant for Isaac must command the
+  robot and in mock mode, but **not in Isaac**. Code meant for Isaac must command the
   finger joints, or go through the SRDF named states (`open`, `tube_15mm`, `closed`). Those
   names exist in every backend because `prepare.py` keeps them.
 - On the real robot, MoveIt sends `max_effort: 35.0` (from `moveit_controllers.yaml`).
@@ -96,11 +129,6 @@ Consequences:
   gap is more than 1 mm below the current gap. Otherwise it runs a position `move`.
   `max_effort == 0` means use `default_force_n`, and a negative value always means move
   (`gripper_cmd move` sends -1).
-- In Gazebo, `robot_state_publisher` and `move_group` are remapped to
-  **`/joint_states_measured`**. `finger_mimic.py` republishes `/joint_states` there with
-  `gripper_joint` replaced by the *measured* distance between the fingers. If you add a node
-  that needs the gripper's true opening in sim, subscribe to that topic, or read the finger
-  joints the way `bin_pick.py` does.
 - Real `/joint_states` has two publishers: the driver (6 arm joints, 20 Hz) and the gripper node
   (`gripper_joint`, 10 Hz). The gripper also publishes `gripper/state` (gap in `position`, force
   in `effort`).
@@ -110,8 +138,7 @@ Consequences:
 ## 4. Frames and geometry to keep in mind
 
 - `world` = URDF root = the robot base frame, 0.10 m below the shoulder axes. The real
-  mounting surface is at **z = −0.105**. The Gazebo floor is at **z = −0.06**, an old pedestal
-  mesh. The Isaac table top is at about −0.105.
+  mounting surface is at **z = −0.105**, and the Isaac table top is at about −0.105.
 - `arm_tool0` = flange. `gripper_tcp` = between the fingertips, **15 mm above the tips**. This
   is the IK tip of the `arm` group (chain `arm_base_link → gripper_tcp`) and the frame all
   grasp poses use. The flange-to-TCP distance is about 0.251 m.
@@ -173,39 +200,33 @@ rejected on the real arm.
   `enable_settle_s` 1.0 vs 0.3, and gripper `open_gap_mm` 30 vs 85. The YAML wins when you use
   `bringup.launch.py`. If you run a node bare, you get the code defaults.
 
-## 7. Gazebo specifics (`lwa4p_gazebo`)
+## 7. `lwa4p_gazebo` (to be removed)
 
-- `gazebo.launch.py` builds MoveIt config with `MoveItConfigsBuilder`, but **replaces
-  `robot_description`** with `lwa4p_gazebo.urdf.xacro`, with XML comments stripped because
-  gazebo_ros2_control chokes on them. It swaps in the sim `moveit_controllers.yaml`.
-- Controllers (`joint_state_broadcaster`, `arm_controller`, `gripper_controller`,
-  `finger_controller`) are spawned after `spawn_entity` exits. Wait for
-  `You can start planning now!` and 4× `activated`.
-- Joints are PID force-driven (gains in `config/ros2_controllers.yaml`, read by the plugin
-  through `--params-file`). Do not switch to position teleporting: friction grasps rely on
-  non-zero joint velocity. gazebo_ros2_control's own mimic joints do not work with PID, which
-  is why `finger_mimic.py` exists.
-- **MoveIt does not see Gazebo objects.** Scripts add collision boxes through
-  `apply_planning_scene`, and those boxes **persist in move_group** after the script exits.
-- To reset the world, restart the launch. There is no reset service in use.
-- Every script in `scripts/` must be listed in `install(PROGRAMS …)` in `CMakeLists.txt`, have
-  a `#!/usr/bin/env python3` shebang, and be executable. Scripts import `simple_moveit` as a
-  sibling module, which works because they are installed side by side in `lib/lwa4p_gazebo`.
-- `pick_tube.py` and `bin_pick.py` use `/gazebo/get_entity_state` only for sim-side checks and
-  obstacle placement, and they degrade gracefully without it. Keep any new sim-only calls
-  optional in the same way, so scripts still run on the real robot.
-- `bin_pick.py` perception: one cloud → TF to `world` → crop to the bin → highest top surface →
-  PCA for yaw and size → candidate grasps scored by finger-to-wall clearance. Bin constants
-  are hard-coded and must match `worlds/lwa4p_table.world`.
+Gazebo is abandoned, and this package has no future on Jazzy. **Do not port or extend it.** Until
+it is removed, it still holds things other code needs, so move these first:
+
+- `isaac/tools/make_isaac_urdf.py` generates the Isaac URDF from `urdf/lwa4p_gazebo.urdf.xacro`.
+  That file's camera mount must move to `lwa4p_description`, and the generator must follow.
+- `scripts/simple_moveit.py` and `go_to.py` are useful on the real robot and on mock hardware.
+- `scripts/bin_pick.py` holds grasp logic (`find_top_object`, `grasp_options`, `wall_clearance`)
+  to port into the skill server. Its perception is a simple point-cloud detector: one cloud, TF
+  to `world`, crop to the bin, highest top surface, then PCA for yaw and size.
+- `isaac/README.md` §4 records the reference scene, so the world file itself can go.
+- `docker/Dockerfile` references `gazebo.launch.py` in a build check and in its default command.
 
 ## 8. Isaac Sim + MoveIt (`isaac/moveit/`)
 
-- `run.sh` validates Isaac's Python, **rebuilds `lwa4p:humble`** (so compiled MTC stays in sync
+Isaac is the only physics simulator, and it has gaps: **object grasping has never been tested**,
+and no RGB-D data is published. NVIDIA's minimum for Sim 6.2 is an RTX 4080 with 16 GB; the
+integration below was verified on an RTX 3070 with 8 GB, on the previous stack. The proposal's
+section 13.3 lists the remaining work.
+
+- `run.sh` validates Isaac's Python, **rebuilds the Docker image** (so compiled MTC stays in sync
   with `src/`), runs `prepare.py`, starts `simulation.py` on the **host** under Isaac's Python
   3.12, waits for `[LWA4P] READY`, then runs `moveit.launch.py` in the container with
   `--network host --ipc host`.
 - `simulation.py` imports the URDF to USD (cached by SHA-256 under `.runtime/usd/<hash>/`),
-  removes the ArticulationRoot from the separate fixed `camera_link` branch, and hosts a Humble
+  removes the ArticulationRoot from the separate fixed `camera_link` branch, and hosts a
   `controller_manager` through `isaacsim.ros2.control` with `IsaacSimSystem`. Controller
   config: `isaac/moveit/controllers.yaml`. This depends on the **Sim 6.2 private API**
   (`_isaacsim_ros2_control.setup_cm`), so rerun `--test` after any Sim upgrade.
@@ -216,8 +237,8 @@ rejected on the real arm.
   `.runtime/{execution,mtc}.json` and `.runtime/reports/`. The files in
   `isaac/moveit/verification/*.json` are **historical** results that are checked in, not
   outputs.
-- Known issue: `move_group` (MoveIt 2.5.10) crashes with SIGSEGV on SIGINT shutdown. It
-  happens after the work is done and is not fixed.
+- Known issue from before the migration: `move_group` crashed with SIGSEGV on SIGINT shutdown,
+  after the work was done. Recheck on Jazzy.
 - Override with the env vars `ISAACSIM_PATH`, `ROS_DOMAIN_ID` (default 68),
   `LWA4P_ISAAC_CACHE` and `LWA4P_ISAAC_REPORT_DIR`.
 - `isaac/lwa4p_cfg.py` is an **unvalidated** Isaac Lab 2.x template. `READY` puts the TCP at
@@ -226,20 +247,20 @@ rejected on the real arm.
 ## 9. Build, run and verify
 
 ```bash
-# On this host (Jazzy): always go through Docker. From the repo root:
+# Once docker/Dockerfile is migrated (see §1). From the repo root:
 docker build --build-arg USER_UID="$(id -u)" --build-arg USER_GID="$(id -g)" \
-  -f docker/Dockerfile -t lwa4p:humble .
+  -f docker/Dockerfile -t lwa4p:jazzy .
 ```
-- The image **COPYs `src/`** at build time and has no bind mount for the Gazebo, real or demo
+- The image **COPYs `src/`** at build time and has no bind mount for the real or demo
   flows. **Rebuild after every source change**, or bind-mount `src/` yourself and rebuild with
   colcon inside the container.
 - The build also acts as the smoke test. It imports `can`, `canopen`, the driver and the
-  gripper modules, and runs `--show-args` on `gazebo.launch.py` and `real.launch.py`.
-- Inside the image (or on a native Humble machine):
+  gripper modules, and runs `--show-args` on the launch files.
+- Inside the image, or natively on a Jazzy machine such as this host:
   `colcon build --symlink-install`. With symlink install, edits to Python, YAML and launch files
   apply immediately. **New** files need a rebuild, and C++ always needs one.
 - `rosdep` must skip `warehouse_ros_mongo` (it is in `lwa4p_moveit_config/package.xml`, has no
-  Humble binary, and is unused).
+  Jazzy binary, and is unused).
 - `canopen==2.3.0` and `python-can==4.6.1` come from pip and are **not** declared in
   `package.xml` or `setup.py`.
 - The MTC packages are only in the Dockerfile's apt list. Because `lwa4p_mtc_verification`
@@ -247,7 +268,7 @@ docker build --build-arg USER_UID="$(id -u)" --build-arg USER_GID="$(id -g)" \
   on that package. Use `--packages-skip lwa4p_mtc_verification` there.
 
 **DDS and environment.** Use `RMW_IMPLEMENTATION=rmw_fastrtps_cpp` everywhere (`move_group`
-hangs on Zenoh in Humble). Domain IDs and settings differ by flow:
+hung on Zenoh before the migration, so retest before changing this). Domain IDs and settings differ by flow:
 - Dockerfile default: `ROS_DOMAIN_ID=42`, `ROS_LOCALHOST_ONLY=1`.
 - Real robot docs: `ROS_DOMAIN_ID=43`, `--network host`.
 - Isaac: `ROS_DOMAIN_ID=68`, `ROS_LOCALHOST_ONLY=0`.
@@ -258,8 +279,7 @@ Match these when you attach a second terminal.
 `ament_lint`). Verification today consists of:
 1. the Dockerfile's build-time import and `--show-args` checks;
 2. `./isaac/moveit/run.sh --test` (needs a GPU and Isaac);
-3. manual runs: `gazebo.launch.py gui:=false` + `go_to.py home`, then `pick_tube.py` and
-   `bin_pick.py`.
+3. manual runs on mock hardware: `demo.launch.py` + `go_to.py home`.
 
 The pure-logic code (`joint_motion_verification.cpp`, `Trajectory.sample` in the driver,
 `find_top_object` and `grasp_options` in `bin_pick.py`, `crc16` in `wsg50.py`) is the easiest
@@ -274,8 +294,8 @@ place to add tests.
 - Do not raise velocity or acceleration limits for the real arm without being asked (see §5).
 - Treat `isaac/lwa4p_wsg50.urdf` as **generated**. Change the xacro in `lwa4p_description` (or
   the numbers in `make_isaac_urdf.py`), then regenerate with
-  `python3 isaac/tools/make_isaac_urdf.py` in a sourced Humble environment. The generator
-  reads the *Gazebo* xacro (arm + gripper + camera).
+  `python3 isaac/tools/make_isaac_urdf.py` in a sourced Jazzy environment. The generator
+  currently reads the xacro in `lwa4p_gazebo` (arm + gripper + camera, see §7).
 
 ## 11. Change checklist: what must stay in sync
 
@@ -284,9 +304,8 @@ place to add tests.
 | Joint names, groups or named states (SRDF) | `simple_moveit.py` (reads the SRDF at runtime for `named()`), `go_to.py` docs, `prepare.py` (assumes the gripper group/state layout), the MTC task (uses `arm`, `wsg50`, `gripper_tcp`, `tube_15mm`, `open`), `driver.yaml` `joint_names` |
 | Gripper geometry or offset (`wsg50.urdf.xacro`) | `gripper.yaml` `finger_offset_mm`, `bin_pick.py` `FINGER_T`/`FINGER_W`/`TCP_ABOVE_FINGERTIP`, regenerate the Isaac URDF, the `0.0425` checks in `joint_motion_verification.cpp` and `prepare.py` `READY` |
 | Camera pose | the `realsense_d435` call in `lwa4p_gazebo.urdf.xacro`, `isaac/README.md` §3, regenerate the Isaac URDF |
-| World objects or bin positions | `lwa4p_table.world`, the constants and collision boxes in `bin_pick.py`/`pick_tube.py`, `isaac/README.md` §4 |
-| Controller names | all three `moveit_controllers.yaml` files, both `ros2_controllers.yaml`, `isaac/moveit/controllers.yaml`, the driver `controller_name`, the gripper action name in `gripper_node.py` |
-| Adding a Gazebo script | `install(PROGRAMS)` in `lwa4p_gazebo/CMakeLists.txt`, shebang, `chmod +x` |
+| World objects | `isaac/moveit/simulation.py`, `isaac/moveit/planning_scene.py`, `isaac/README.md` §4 |
+| Controller names | the `moveit_controllers.yaml` files, `lwa4p_moveit_config/config/ros2_controllers.yaml`, `isaac/moveit/controllers.yaml`, the driver `controller_name`, the gripper action name in `gripper_node.py` |
 | Adding Python deps to the driver | `package.xml` / `setup.py` **and** the Dockerfile pip line |
 | Anything in `src/` used by Isaac | nothing manual: `run.sh` rebuilds the image |
 
@@ -310,23 +329,29 @@ place to add tests.
 
 ## 13. Planned architecture (RoboCup 2027)
 
-The team's proposal is the diagram in [manipulation_architecture.txt](manipulation_architecture.txt)
-(UTF-8, LF line endings). Nothing in the diagram is implemented yet, except what the "Today"
-column below says.
+The planned stack is the diagram in [manipulation_architecture.txt](manipulation_architecture.txt)
+(UTF-8, LF line endings). [manipulation_implementation_proposal.md](manipulation_implementation_proposal.md)
+is the proposed implementation: action definitions, the failure contract with the BT, MTC stage
+lists, delivery plan, and prototype results. Read it before building any of this. It is a
+proposal under review, so where it and this section differ, ask. Nothing in the diagram is
+implemented yet, except what the "Today" column below says.
 
-### How to read each layer, given the team decisions in §1
+### What changed from the first diagram, and why
 
-| Layer in the diagram | Owner | Today | Notes for the plan |
+The first version of the diagram is in commit `27fed6e`. The current diagram already reflects
+this table.
+
+| Layer in the first diagram | Owner | Today | Notes for the plan |
 |---|---|---|---|
 | Compute split (GPU / CPU cores 4–5 / cores 6–7, RT priority) | — | nothing | The GPU part concerns the perception team. Core isolation and RT priority **do not apply** to the real arm: its driver is a 20 Hz Python loop sending Profile Position targets over SDO. |
 | Perception and world model (VLM, then a TF2 3D pose) | other team | `bin_pick.py` has a simple point-cloud detector (sim only) | Contract: `PoseStamped` in a TF frame. VLM latency is in seconds, so use it for task-level detection only, never closed-loop. Grasping thin objects (tubes) needs **orientation and size**, not just a depth-lookup point. Ask for them, or fit them from the cloud locally as `bin_pick.py` does. |
-| Task supervisor (BehaviorTree.CPP) | this team | nothing | See the split with MTC below. |
-| MTC | this team | only `lwa4p_mtc_verification`, a sim test utility and not a skill | MTC tasks need `move_group/ExecuteTaskSolutionCapability`. Only `isaac/moveit/moveit.launch.py` enables it. **`real.launch.py` and `gazebo.launch.py` do not.** Add it before running MTC skills there. |
-| OMPL (RRTConnect) + Pilz LIN/PTP | this team | OMPL via `moveit_configs_utils` defaults. Isaac forces `ompl` only. | `pilz_cartesian_limits.yaml` allows 1.0 m/s, far beyond the real arm (0.5 rad/s joints). Set realistic values before using LIN on hardware. Check which pipelines `move_group` actually loaded before relying on Pilz. |
-| Kinematics (pick_ik / TRAC-IK) | this team | KDL (`kinematics.yaml`) | That one file applies to every backend. pick_ik has Humble binaries; TRAC-IK may need a source build. |
-| Ruckig smoothing | this team | not configured | Compatible with the real driver, which resamples any dense trajectory. Keep normal time parameterization in front of it. |
+| Task supervisor (BehaviorTree.CPP) | AI team | nothing | This team provides the actions and the failure enumeration. See the split with MTC below. |
+| MTC | this team | only `lwa4p_mtc_verification`, a sim test utility and not a skill | MTC tasks need `move_group/ExecuteTaskSolutionCapability`. Only `isaac/moveit/moveit.launch.py` enables it. **`real.launch.py` and `demo.launch.py` do not by default.** Add it before running MTC skills there. |
+| OMPL (RRTConnect) + Pilz LIN/PTP | this team | `move_group` loads OMPL, CHOMP and Pilz from `moveit_configs_utils` defaults. Isaac forces `ompl` only. | Prototype result: Pilz LIN failed `Place` on `arm_3_joint` limits even with realistic Cartesian limits, while MTC's `CartesianPath` passed. Use `CartesianPath` for straight moves. `pilz_cartesian_limits.yaml` allows 1.0 m/s, far beyond the real arm. |
+| Kinematics (pick_ik / TRAC-IK) | this team | KDL (`kinematics.yaml`) | That one file applies to every backend. Prototype result over 132 top-down picks: KDL 56, pick_ik 57, at 2.5× the time, so KDL stays. pick_ik and the TRAC-IK plugin both have Jazzy binaries. |
+| Ruckig smoothing | this team | not configured | Deferred. It would only affect OMPL segments, and the real driver resamples every trajectory at 20 Hz. |
 | MoveIt Servo / "velocity bypass" | — | — | **Not possible on the real arm.** The driver serves only `FollowJointTrajectory` goals in Profile Position mode and has no velocity or streaming input. At most, treat it as sim-only research. |
-| `ros2_control` (controller_manager, JTC, forward_command, joint_state_broadcaster) | — | Gazebo, Isaac, mock | **Simulation only.** On the real robot, `lwa4p_driver` serves `arm_controller/follow_joint_trajectory` and `gripper_node` serves `gripper_controller/gripper_cmd`. There is no controller_manager, no 100–250 Hz loop, and no velocity controller. |
+| `ros2_control` (controller_manager, JTC, forward_command, joint_state_broadcaster) | — | Isaac, mock | **Simulation only.** On the real robot, `lwa4p_driver` serves `arm_controller/follow_joint_trajectory` and `gripper_node` serves `gripper_controller/gripper_cmd`. There is no controller_manager, no 100–250 Hz loop, and no velocity controller. |
 | `ros2_canopen` / Lely, 1 Mbit/s, sync PDO | — | — | **Superseded by the driver decision.** The real bus is 500 kbit/s, SDO only, PP mode, 20 Hz, through `lwa4p_driver` (see §6). |
 | Hardware: LWA 4P, E-stop | — | as §6 | The diagram **omits the WSG 50 gripper**, which sits on `can1`, speaks its own protocol (not CiA 402), and is served by `gripper_node`. Every skill involving grasping depends on it. |
 
@@ -334,15 +359,13 @@ column below says.
 
 1. **Keep sim and real apart at the action interface.** Skills and the behaviour tree talk to
    MoveIt and MTC, plus `/joint_states`, TF and `gripper/state`. Never call `controller_manager`
-   services (e.g. `switch_controller`), and never require Gazebo or Isaac services. Sim-only
-   helpers must stay optional, as in `pick_tube.py`.
+   services (e.g. `switch_controller`), and never require Isaac services. Sim-only helpers must
+   stay optional.
 2. **Abstract the gripper.** Skills use SRDF named states (`open`, `tube_15mm`, `closed`) or one
-   "grasp(width, force)" call. Never use raw joint names: the real robot and Gazebo use
-   `gripper_joint`, Isaac uses two finger joints (§3). Grasp verification needs two
-   implementations behind one interface:
-   - **real:** `gripper_node` reports `HOLDING`, and `gripper/state` carries the force in
-     `effort`;
-   - **sim:** the measured gap between the fingers, as in `bin_pick.py`.
+   "grasp(width, force)" call. Never use raw joint names: the real robot uses
+   `gripper_joint`, Isaac uses two finger joints (§3). Every backend serves the same
+   `GripperCommand` behaviour, so grasp checks use one code path: `gripper_node` on the real
+   robot, and the planned `sim_gripper_server` in simulation.
 3. **Plan within the real driver's limits, even in simulation.** The simulation controllers
    accept trajectories the driver rejects:
    - segments faster than about 30°/s;
@@ -354,22 +377,22 @@ column below says.
    pre-execution check, so failures show up in simulation first. Test each new skill once on the
    real arm at low speed.
 4. **Split responsibilities between the behaviour tree and MTC.** MTC owns the motion
-   sequence (approach → grasp → lift → transfer → place, via its Pick/Place containers) and
-   backtracks over IK and grasp candidates. The behaviour tree works at skill level: requesting
-   perception, starting an MTC task, verifying the grasp, retrying or re-detecting, recovering,
-   and coordinating with the navigation team. Do not duplicate the motion stages as
-   behaviour-tree nodes.
-5. **Expose skills as ROS actions** (a "skill server"). The robot-level behaviour tree, owned by
-   another team and possibly Nav2's BT.CPP, can then call manipulation as one subtree.
-   Interfaces belong in a dedicated `*_interfaces` package.
+   sequence (approach → grasp → lift → place) and backtracks over IK and grasp candidates. The
+   skill server verifies the grasp. The behaviour tree works at skill level: requesting
+   perception, starting a skill, retrying or re-detecting, recovering, and coordinating with
+   navigation. Do not duplicate the motion stages as behaviour-tree nodes.
+5. **Expose skills as ROS actions** (a "skill server"). The AI team's behaviour tree calls them.
+   Interfaces belong in a dedicated `*_interfaces` package. **Every goal must end with a result
+   carrying a failure code**, so never reject a goal in the goal callback: a rejected goal
+   returns no result. Convert all low-level errors to the enumeration in one place.
 6. **Planning scene.** Perception results must become MoveIt collision objects, because MoveIt
    sees nothing on its own. Objects persist in `move_group` until you remove them, so own their
    lifecycle (add, attach, detach, remove) in the skill server.
 7. **Frames.** Manipulation plans in `world` (= the arm base, §4). When the arm is mounted on
    the mobile base, `world` must hang off the base TF tree, the base must stay still during
    execution, and the camera pose needs hand-eye calibration (still a placeholder).
-8. **Platform.** ROS 2 Humble reaches end of life in May 2027, around the competition, and
-   Gazebo Classic is already EOL. Do not add new Humble-only dependencies casually.
+8. **Platform.** Target ROS 2 Jazzy and Isaac Sim. Check that a dependency has a Jazzy binary
+   before adding it.
 
 **Naming.** The `lwa4p_` prefix is only for hardware-specific packages (description, driver,
 MoveIt config, sim models). New layers above the action interface are hardware-agnostic and
@@ -379,9 +402,11 @@ frames, named states, gripper widths and forces) come from parameters or YAML, s
 can move to another arm or gripper without renaming.
 
 Suggested homes for new code, which **do not exist yet**:
-- `manipulation_interfaces`: skill action definitions;
+- `manipulation_interfaces`: skill actions and the failure enumeration;
 - `manipulation_skills`: skill server + MTC tasks, in C++ (you can reuse the
   `.clang-format` from `lwa4p_mtc_verification`);
-- `manipulation_bt`: BT.CPP nodes and XML trees.
+- `manipulation_sim`: the simulation gripper adapter;
+- `lwa4p_bringup`: launch files and robot-specific configuration.
 
-Agree on the names with the team before creating them.
+BT nodes and XML trees belong to the AI team, not this repo. Agree on the names with the team
+before creating them.
