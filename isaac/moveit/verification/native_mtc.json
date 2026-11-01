@@ -1,0 +1,135 @@
+{
+  "success": true,
+  "checked_at_utc": "2026-10-25T21:29:47.623643+00:00",
+  "setup": {
+    "baseline_commit": "a55eb294bd15bda130e18aed78eac85a6c827205",
+    "isaac": "6.2.0-rc.14+release.52805.02189a84.gl",
+    "simulator_location": "host",
+    "ros_distribution": "humble",
+    "ros_location": "docker",
+    "image": "lwa4p:humble",
+    "image_id": "sha256:2a02d0f0d744838ea13f412257495fdd43419a8908ef311a7bd374e15849c6b2",
+    "gpu": "NVIDIA GeForce RTX 3070 Laptop GPU",
+    "gpu_memory_mib": 8192,
+    "nvidia_driver": "580.178.04",
+    "gui": false
+  },
+  "command": "./isaac/moveit/run.sh --test",
+  "command_exit_code": 0,
+  "concurrent_service_request": {
+    "success": false,
+    "message": "BUSY",
+    "check": "check_ptp.py"
+  },
+  "moveit": {
+    "success": true,
+    "checked_at": "2026-10-25T21:29:26.611574+00:00",
+    "controllers": {
+      "arm_controller": "active",
+      "gripper_controller": "active",
+      "joint_state_broadcaster": "active"
+    },
+    "direct_controller": {
+      "target": {
+        "arm_1_joint": 0.11985238537192344,
+        "arm_2_joint": -0.36152246594429016,
+        "arm_3_joint": 0.8053164482116699,
+        "arm_4_joint": 0.0001550966699142009,
+        "arm_5_joint": 1.9998233318328857,
+        "arm_6_joint": 2.5852256158032105e-07
+      },
+      "measured": {
+        "arm_1_joint": 0.11973146349191666,
+        "arm_2_joint": -0.3673648536205292,
+        "arm_3_joint": 0.8079850077629089,
+        "arm_4_joint": 0.00024235718592535704,
+        "arm_5_joint": 1.9997087717056274,
+        "arm_6_joint": -3.1191839866551163e-07
+      },
+      "movement": 0.11987907811999321
+    },
+    "workbench_in_planning_scene": true,
+    "moveit": {
+      "action_status": 4,
+      "error_code": 1,
+      "planned_points": 24,
+      "target": {
+        "arm_1_joint": 0.3197698786854744,
+        "arm_2_joint": -0.3673611879348755,
+        "arm_3_joint": 0.8079842329025269,
+        "arm_4_joint": 0.100237099811784,
+        "arm_5_joint": 1.9997090101242065,
+        "arm_6_joint": 8.233498505205716e-08
+      },
+      "measured": {
+        "arm_1_joint": 0.3177584707736969,
+        "arm_2_joint": -0.37144529819488525,
+        "arm_3_joint": 0.8072264790534973,
+        "arm_4_joint": 0.10208288580179214,
+        "arm_5_joint": 1.999997854232788,
+        "arm_6_joint": -0.0013820314779877663
+      }
+    },
+    "gripper_closed": {
+      "gripper_finger_left_joint": 0.008663461543619633,
+      "gripper_finger_right_joint": 0.009979760274291039
+    },
+    "gripper_moveit": {
+      "action_status": 4,
+      "error_code": 1,
+      "planned_points": 24
+    },
+    "gripper_open": {
+      "gripper_finger_left_joint": 0.04105866700410843,
+      "gripper_finger_right_joint": 0.042432017624378204
+    }
+  },
+  "mtc": {
+    "initial_arm": {
+      "arm_1_joint": 0.3177584409713745,
+      "arm_2_joint": -0.37144556641578674,
+      "arm_3_joint": 0.8072267770767212,
+      "arm_4_joint": 0.10208293795585632,
+      "arm_5_joint": 1.999997615814209,
+      "arm_6_joint": -0.0013820473104715347
+    },
+    "measured": {
+      "arm_1_joint": 0.3177427351474762,
+      "arm_2_joint": -0.3773568570613861,
+      "arm_3_joint": 0.8098072409629822,
+      "arm_4_joint": 0.10205459594726562,
+      "arm_5_joint": 1.9998867511749268,
+      "arm_6_joint": -0.0013850529212504625,
+      "gripper_finger_left_joint": 0.04150085896253586,
+      "gripper_finger_right_joint": 0.042787905782461166
+    },
+    "mtc_error_code": 1,
+    "observed_maximum": {
+      "arm_1_joint": 0.4377366602420807,
+      "arm_2_joint": -0.37144508957862854,
+      "arm_3_joint": 0.8099997043609619,
+      "arm_4_joint": 0.14214202761650085,
+      "arm_5_joint": 2.0001301765441895,
+      "arm_6_joint": -0.0013820435851812363,
+      "gripper_finger_left_joint": 0.04150085896253586,
+      "gripper_finger_right_joint": 0.04293323680758476
+    },
+    "observed_minimum": {
+      "arm_1_joint": 0.3177134394645691,
+      "arm_2_joint": -0.37776651978492737,
+      "arm_3_joint": 0.8072261214256287,
+      "arm_4_joint": 0.10205439478158951,
+      "arm_5_joint": 1.9997740983963013,
+      "arm_6_joint": -0.001402875641360879,
+      "gripper_finger_left_joint": 0.0070381383411586285,
+      "gripper_finger_right_joint": 0.008626664988696575
+    },
+    "planned_solutions": 1,
+    "success": true
+  },
+  "limitations": [
+    "GUI and real hardware were not tested in this run.",
+    "No physical object grasp or holding detection was tested.",
+    "The existing MoveIt 2.5.10 CallbackGroup SIGSEGV recurred during shutdown after successful checks."
+  ]
+}

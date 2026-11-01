@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1-mesa-dri \
         libglx-mesa0 \
         mesa-utils \
+        nlohmann-json3-dev \
         python3-colcon-common-extensions \
         python3-numpy \
         python3-pip \
@@ -36,6 +37,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-humble-joint-trajectory-controller \
         ros-humble-forward-command-controller \
         ros-humble-moveit \
+        ros-humble-moveit-task-constructor-core \
+        ros-humble-moveit-task-constructor-capabilities \
+        ros-humble-moveit-task-constructor-visualization \
         ros-humble-rmw-fastrtps-cpp \
         ros-humble-ros2-control \
         ros-humble-rviz2 \

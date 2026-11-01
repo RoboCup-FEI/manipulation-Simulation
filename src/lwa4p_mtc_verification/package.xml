@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>lwa4p_mtc_verification</name>
+  <version>0.1.0</version>
+  <description>Verify MTC planning and measured LWA4P execution in Isaac Sim.</description>
+  <maintainer email="dmitriiognev@users.noreply.github.com">Dmitrii Ognev</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>moveit_task_constructor_core</depend>
+  <depend>nlohmann-json-dev</depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

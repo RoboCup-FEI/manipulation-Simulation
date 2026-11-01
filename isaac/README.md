@@ -1,5 +1,10 @@
 # 🤖 LWA 4P + WSG 50 for Isaac Sim / Isaac Lab
 
+**Isaac Sim 6.2 + MoveIt 2 Humble:** the complete ROS control integration and
+one-command launcher are documented in [moveit/README.md](moveit/README.md).
+Run `./isaac/moveit/run.sh` from this repository root.
+Arm and gripper planning/execution have been verified on the local RTX 3070.
+
 This folder holds everything you need to simulate this robot in Isaac Sim and train policies (VLA, RL, imitation learning) that can later run on the **real** arm.
 
 | File | What it is |
@@ -15,7 +20,10 @@ This folder holds everything you need to simulate this robot in Isaac Sim and tr
 > - the gravity torques match the SCHUNK payload spec;
 > - the arm stays stable when held under gravity.
 >
-> It was **not** opened in Isaac Sim, because the machine that produced it has no NVIDIA GPU. `lwa4p_cfg.py` is a template for Isaac Lab 2.x. Check its argument names against your version.
+> The original export was prepared without an NVIDIA GPU. The local Isaac Sim
+> 6.2 / MoveIt Humble integration has since been exercised on an RTX 3070;
+> see [moveit/README.md](moveit/README.md) for executed checks and limits.
+> `lwa4p_cfg.py` remains a template for Isaac Lab 2.x; its Lab API has not been validated here.
 
 ---
 

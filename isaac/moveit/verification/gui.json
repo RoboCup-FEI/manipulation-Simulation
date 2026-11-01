@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-10-23T17:02:29.542260+00:00",
+  "windows": [
+    "0x2c0000d \"Isaac Sim Python 6.2.0\": (\"IsaacSim\" \"Isaac Sim Python 6.2.0\")  1440x900+14+49  +549+449",
+    "0x3400014 \"/home/dmitrii-ognev/Desktop/RoboCup/lwa4p_driver/src/lwa4p_moveit_config/config/moveit.rviz* - RViz\": (\"rviz2\" \"rviz2\")  1200x975+14+49  +1147+467",
+    "0x3400011 \"rviz2\": (\"rviz2\" \"rviz2\")  452x871+723+68  +1870+535"
+  ],
+  "isaac_window": true,
+  "rviz_window": true,
+  "rviz_moveit_connected": true,
+  "mesh_resource_errors": false,
+  "rviz_plan_execute_completed": true,
+  "moveit_execution_succeeded": true
+}
