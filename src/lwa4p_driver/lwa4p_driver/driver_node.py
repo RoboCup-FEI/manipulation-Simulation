@@ -8,6 +8,7 @@ import time
 import canopen
 import rclpy
 from control_msgs.action import FollowJointTrajectory
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -69,8 +70,15 @@ class Lwa4pDriver(Node):
         self.goal_tol = p("goal_tolerance_deg", 0.5).value * DEG
         self.goal_time = p("goal_time_tolerance_s", 3.0).value
         self.enable_settle = p("enable_settle_s", 1.0).value
+        self.effort_scale = list(p("effort_scale", [1.0] * 6).value)
+        self.effort_alpha = p("effort_alpha", 0.5).value
+        diag_rate = p("diagnostics_rate_hz", 1.0).value
+        log_period = p("status_log_period_s", 2.0).value
+        self.temp_warn = p("temperature_warn_c", 60.0).value
+        self.temp_error = p("temperature_error_c", 75.0).value
         controller = p("controller_name", "arm_controller").value
         assert len(self.node_ids) == len(self.joint_names) == len(self.signs) == len(self.offsets)
+        assert len(self.effort_scale) == len(self.node_ids)
 
         # ---- CAN ----
         self.can_lock = threading.Lock()
@@ -110,10 +118,17 @@ class Lwa4pDriver(Node):
         self.trace, self.trace_path = None, ""
         self.q_prev, self.t_prev = list(self.q), time.time()
         self.qd = [0.0] * len(self.nodes)
+        self.torque = [None] * len(self.nodes)      # smoothed 0x6077, per mille of rated
+        self.tq_stats = [[0.0, 0.0, 0, 0] for _ in self.nodes]   # sum, sum |x|, n, peak since last diagnostics
 
         # ---- ROS interfaces ----
         cb = ReentrantCallbackGroup()
         self.pub = self.create_publisher(JointState, "joint_states", 10)
+        self.diag_pub = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
+        self.create_timer(1.0 / diag_rate, self.publish_diagnostics, callback_group=cb)
+        self.last_diag = None
+        if log_period > 0:
+            self.create_timer(log_period, self.log_status, callback_group=cb)
         self.create_service(Trigger, "~/enable", self.srv_enable, callback_group=cb)
         self.create_service(Trigger, "~/disable", self.srv_disable, callback_group=cb)
         self.create_service(Trigger, "~/reset", self.srv_reset, callback_group=cb)
@@ -150,12 +165,16 @@ class Lwa4pDriver(Node):
                     if self.enabled and (cycle % 4 == 0 or self.traj is not None):
                         sw = [ds402.statusword(n) for n in self.nodes]
                     self.step(q, sw)
+                    k = cycle % len(self.nodes)     # one torque read per cycle keeps the loop short
+                    tq = ds402.torque(self.nodes[k])
             except Exception as e:      # CAN timeout etc.
                 self.get_logger().error(f"CAN error: {e}", throttle_duration_sec=2.0)
                 if self.enabled:
                     self.trip(f"CAN error: {e}")
                 time.sleep(0.2)
                 continue
+            if tq is not None:
+                self.update_torque(k, tq)
             now = time.time()
             dt = now - self.t_prev
             if dt > 0:
@@ -301,7 +320,95 @@ class Lwa4pDriver(Node):
         m.name = self.joint_names
         m.position = q
         m.velocity = self.qd
+        m.effort = [self.signs[i] * (t or 0.0) / 1000.0 * self.effort_scale[i]
+                    for i, t in enumerate(self.torque)]
         self.pub.publish(m)
+
+    def update_torque(self, i, tq):
+        prev = self.torque[i]
+        self.torque[i] = tq if prev is None else prev + self.effort_alpha * (tq - prev)
+        st = self.tq_stats[i]
+        st[0] += tq
+        st[1] += abs(tq)
+        st[2] += 1
+        if abs(tq) > abs(st[3]):
+            st[3] = tq
+
+    def publish_diagnostics(self):
+        arr = DiagnosticArray()
+        arr.header.stamp = self.get_clock().now().to_msg()
+        drv = DiagnosticStatus(name="lwa4p_driver: drives", hardware_id=self.channel)
+        if self.enabled:
+            drv.level = DiagnosticStatus.OK
+            drv.message = "enabled" + (", executing trajectory" if self.traj is not None else "")
+        elif self.fault:
+            drv.level, drv.message = DiagnosticStatus.WARN, f"disabled after trip: {self.fault}"
+        else:
+            drv.level, drv.message = DiagnosticStatus.OK, "disabled"
+        arr.status.append(drv)
+        arr.status += [self.joint_diagnostics(i) for i in range(len(self.nodes))]
+        self.diag_pub.publish(arr)
+        self.last_diag = arr
+
+    def log_status(self):
+        arr = self.last_diag
+        if arr is None:
+            return
+        drv, joints = arr.status[0], arr.status[1:]
+        lines = [f"status: drives {drv.message}"]
+        for s in joints:
+            v = {kv.key: kv.value for kv in s.values}
+            name = s.name.split(": ", 1)[-1].replace("_joint", "")
+            if not v:                       # no response from the drive
+                lines.append(f"  {name}  {s.message}")
+                continue
+            line = f"  {name}  {v['position_deg']:>8} deg  {v['temperature_c']:>5} C"
+            if "torque_mean_pct" in v:
+                line += (f"  torque {v['torque_mean_pct']:>6}% (peak {v['torque_peak_pct']:>6}%)"
+                         f"  ~{v['current_est_a']} A")
+            lines.append(f"{line}  {s.message}")
+        level = max(s.level for s in arr.status)
+        log = self.get_logger()
+        out = (log.error if level >= DiagnosticStatus.ERROR else
+               log.warn if level >= DiagnosticStatus.WARN else log.info)
+        out("\n".join(lines))
+
+    def joint_diagnostics(self, i):
+        n = self.nodes[i]
+        st = DiagnosticStatus(name=f"lwa4p_driver: {self.joint_names[i]}", hardware_id=f"CANopen node {n.id}")
+        stats, self.tq_stats[i] = self.tq_stats[i], [0.0, 0.0, 0, 0]
+        try:
+            with self.can_lock:     # one joint at a time so the control loop is not held up
+                sw = ds402.statusword(n)
+                temp = ds402.temperature(n)
+                errs = ds402.error_history(n)
+        except Exception as e:
+            st.level, st.message = DiagnosticStatus.ERROR, f"no response: {e}"
+            return st
+        state = ds402.ready_state(sw) or ("FAULT" if ds402.is_fault(sw) else "not ready")
+        st.level = DiagnosticStatus.ERROR if ds402.is_fault(sw) else DiagnosticStatus.OK
+        st.message = state
+        if temp is not None and temp >= self.temp_error:
+            st.level = DiagnosticStatus.ERROR
+            st.message += f", temperature {temp:.1f} C >= {self.temp_error:.0f} C"
+        elif temp is not None and temp >= self.temp_warn:
+            st.level = max(st.level, DiagnosticStatus.WARN)
+            st.message += f", temperature {temp:.1f} C >= {self.temp_warn:.0f} C"
+        if errs and ds402.is_fault(sw):
+            st.message += f", error 0x{errs[0]:04X} {ds402.error_name(errs[0])}"
+        vals = {"state": state, "statusword": f"0x{sw:04X}", "position_deg": f"{self.q[i] / DEG:.2f}",
+                "temperature_c": "?" if temp is None else f"{temp:.1f}",
+                "rated_current_a": f"{self.rated_a[i]:.2f}",
+                "error_history": ", ".join(f"0x{e:04X} {ds402.error_name(e)}" for e in errs) or "none"}
+        total, total_abs, cnt, peak = stats
+        if cnt:     # torque in % of rated, joint sign applied; current estimated from mean |torque|
+            sign = self.signs[i]
+            vals.update(torque_mean_pct=f"{sign * total / cnt / 10:+.1f}",
+                        torque_peak_pct=f"{sign * peak / 10:+.1f}",
+                        current_est_a=f"{total_abs / cnt / 1000 * self.rated_a[i]:.2f}",
+                        torque_samples=str(cnt))
+        st.values = [KeyValue(key=k, value=v) for k, v in vals.items()]
+        return st
 
     # ---------- services ----------
     def srv_reset(self, req, res):
