@@ -125,9 +125,19 @@ ros2 service call /run_calibration_sequence std_srvs/srv/Trigger
 | `max_acceleration_rad_s2` | `0.2` | Joint acceleration limit of the planned motion |
 | `trajectory_sample_period_s` | `0.1` | Time between trajectory points |
 | `motion_timeout_margin_s` | `10.0` | Extra time over the trajectory duration before the goal is canceled |
-| `settle_time_s` (`calibration_sequence` only) | `3.0` | Time to hold still at every pose |
+| `settle_time_ms` (`calibration_sequence` only) | `3000` | Time to hold still at every pose [ms] |
 
 The pose file is set by the launch argument `pose_file_path` (default `~/calibration_poses.txt`, a leading `~/` is expanded), so both nodes always use the same file.
+
+Change the hold time in `config/calibration_poses.yaml` (rebuild the image afterwards, because it copies the config at build time) or from the command line:
+
+```bash
+# with both nodes
+ros2 launch lwa4p_calibration_poses calibration_poses.launch.py settle_time_ms:=1500
+
+# the node alone
+ros2 run lwa4p_calibration_poses calibration_sequence_node --ros-args -p settle_time_ms:=1500
+```
 
 The default limits are below the hardware limits from the `lwa4p_driver` README (about 0.5 rad/s and 0.4 rad/s², above that the motor supply trips with `0x3222`).
 The driver itself rejects segments faster than its `max_velocity_deg_s` (30 deg/s).
@@ -160,7 +170,8 @@ The sequence reads the file on every `run_calibration_sequence` call, so poses s
   Both services of `pose_teacher` share a mutually exclusive group, so `save_pose` never records a pose in the middle of a `send_to_pose` motion.
 - **Settle time.**
   `bag_calib.py` skips images taken while any joint moves faster than 0.02 rad/s, and `live_calib.py` needs time for a `SPACE` press.
-  3 s holds give both scripts enough static frames.
+  The default 3 s holds give both scripts enough static frames.
+  With a shorter `settle_time_ms`, check that each pose still yields a static frame and leaves time for the `SPACE` press.
 
 ## Tips for good calibration poses
 

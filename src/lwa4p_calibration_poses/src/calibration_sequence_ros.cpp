@@ -13,10 +13,10 @@ CalibrationSequenceNode::CalibrationSequenceNode()
   pose_file_(
     declare_parameter<std::string>("pose_file_path", DEFAULT_POSE_FILE_PATH),
     arm_motion_client_.joint_count()),
-  settle_time_s_(declare_parameter<double>("settle_time_s", 3.0))
+  settle_time_ms_(declare_parameter<std::int64_t>("settle_time_ms", 3000))
 {
-  if (settle_time_s_ < 0.0) {
-    throw std::invalid_argument("Parameter 'settle_time_s' must not be negative");
+  if (settle_time_ms_ < 0) {
+    throw std::invalid_argument("Parameter 'settle_time_ms' must not be negative");
   }
 
   service_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -69,12 +69,10 @@ void CalibrationSequenceNode::on_run_calibration_sequence_requested(
 void CalibrationSequenceNode::hold_pose(std::size_t pose_number, std::size_t pose_count) const
 {
   RCLCPP_INFO(
-    get_logger(), "Pose %zu/%zu reached, holding still for %.1f s",
-    pose_number, pose_count, settle_time_s_);
+    get_logger(), "Pose %zu/%zu reached, holding still for %ld ms",
+    pose_number, pose_count, static_cast<long>(settle_time_ms_));
 
-  const auto settle_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-    std::chrono::duration<double>(settle_time_s_));
-  if (!rclcpp::sleep_for(settle_time)) {
+  if (!rclcpp::sleep_for(std::chrono::milliseconds(settle_time_ms_))) {
     throw std::runtime_error("Interrupted by shutdown");
   }
 }

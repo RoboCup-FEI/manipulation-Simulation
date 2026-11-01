@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
@@ -16,12 +17,12 @@ namespace lwa4p_calibration_poses
  * @brief Replays the taught calibration poses.
  *
  * run_calibration_sequence moves the arm through every pose of the pose file in order
- * and holds still at each one for settle_time_s, so the camera captures a static robot.
+ * and holds still at each one for settle_time_ms, so the camera captures a static robot.
  */
 class CalibrationSequenceNode : public rclcpp::Node
 {
 public:
-  /// @throws std::invalid_argument if settle_time_s is negative
+  /// @throws std::invalid_argument if settle_time_ms is negative
   CalibrationSequenceNode();
 
 private:
@@ -36,7 +37,7 @@ private:
 
   ArmMotionClient arm_motion_client_;
   JointPoseFile pose_file_;
-  double settle_time_s_;
+  std::int64_t settle_time_ms_;
 
   rclcpp::CallbackGroup::SharedPtr service_callback_group_;
   rclcpp::Service<Trigger>::SharedPtr run_calibration_sequence_service_;
