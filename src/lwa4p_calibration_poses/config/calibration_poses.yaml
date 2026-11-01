@@ -1,0 +1,14 @@
+# Shared by pose_teacher and calibration_sequence: both must command the arm
+# with the same joints and limits. The pose file path is a launch argument.
+/**:
+  ros__parameters:
+    joint_names: [arm_1_joint, arm_2_joint, arm_3_joint, arm_4_joint, arm_5_joint, arm_6_joint]
+    trajectory_action_name: arm_controller/follow_joint_trajectory
+    max_velocity_rad_s: 0.2
+    max_acceleration_rad_s2: 0.2
+    trajectory_sample_period_s: 0.1
+    motion_timeout_margin_s: 10.0
+
+calibration_sequence:
+  ros__parameters:
+    settle_time_s: 3.0
