@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build isaac/lwa4p_wsg50.urdf: a plain URDF (no xacro, no ROS paths) of the
-Schunk LWA 4P + WSG 50-110 + RealSense D435 for Isaac Sim / Isaac Lab.
+Schunk LWA 4P + FTS-LWA sensor + WSG 50-110 + RealSense D435 for Isaac Sim /
+Isaac Lab.
 
     source /opt/ros/humble/setup.bash && source install/setup.bash
     python3 isaac/tools/make_isaac_urdf.py
@@ -23,10 +24,13 @@ camera) and changes what a physics engine needs to be right:
   250 / 500 deg/s^2) has no URDF field -> isaac/lwa4p_cfg.py and README.
 - gripper: two real prismatic finger joints opening outwards, 0..45.25 mm each
   (WSG 50 manual: 55 mm stroke per jaw = jaw width 0..110 mm, minus the measured
-  19.5 mm finger offset), 80 N, 210 mm/s and 2.5 m/s^2 per finger.
-- gripper and camera masses / inertias recomputed from their geometry: housing
-  = 1.15 kg WSG minus its two aluminium base jaws, adapter, jaws and fingers
-  aluminium (2700 kg/m^3; the fingers are not measured yet), D435 72 g.
+  19.5 mm finger offset), 80 N, 210 mm/s and 2.5 m/s^2 per finger. Each finger
+  joint is half the fingertip gap, as gripper_joint/2 in the ROS description.
+- gripper, sensor and camera masses / inertias recomputed from their geometry:
+  housing = 1.15 kg WSG minus its two aluminium base jaws, jaws, fingers and
+  connector plate aluminium (2700 kg/m^3; the fingers are not measured), solid
+  bodies from the meshes. FTS-LWA 0.7 kg (Commonplace Robotics user guide),
+  D435 72 g.
 - ROS-only tags (ros2_control, gazebo) removed, mesh paths -> meshes/*.stl
 """
 import math
@@ -62,6 +66,7 @@ LIMITS = {1: (170, 64.0, 35.0, 250, "ERB 145"), 2: (170, 64.0, 35.0, 250, "ERB 1
 VELOCITY = math.radians(72.0)                                      # rad/s, all axes
 ALU = 2700.0                                                       # kg/m^3
 WSG_MASS = 1.15                                                    # kg incl. base jaws (WSG manual)
+FTS_MASS = 0.7                                                     # kg (FTS-LWA user guide)
 MOUNT_Z = -0.105                     # mounting surface in the root frame (0.10 - 0.205)
 BASE_TOP = 0.10 - 0.072              # bottom of the first ERB 145 ball
 FINGER_TRAVEL = (0.110 - 0.0195) / 2  # m per finger: jaw width 0..110 mm - finger offset
@@ -74,6 +79,25 @@ def load_stl(path):
     n = struct.unpack("<I", b[80:84])[0]
     a = np.frombuffer(b[84:84 + n * 50], dtype=np.dtype([("n", "<3f4"), ("v", "<9f4"), ("a", "<u2")]))
     return a["v"].reshape(-1, 3, 3).astype(np.float64)
+
+
+def mesh_triangles(link):
+    """Triangles of a link's visual mesh in the link frame [m] (scale and origin applied)."""
+    vis = link.find("visual")
+    mesh = vis.find("geometry/mesh")
+    tris = load_stl(os.path.join(MESH_DIR, os.path.basename(mesh.get("filename"))))
+    tris = tris * np.array([float(v) for v in mesh.get("scale", "1 1 1").split()])
+    o = vis.find("origin")
+    if o is not None:           # mesh placed with an origin (e.g. the flipped base)
+        R = rpy_matrix(*[float(v) for v in o.get("rpy", "0 0 0").split()])
+        t = np.array([float(v) for v in o.get("xyz", "0 0 0").split()])
+        tris = tris @ R.T + t
+    return tris
+
+
+def mesh_volume(tris):
+    """Volume of a closed, outward-oriented triangle mesh [m^3]."""
+    return np.einsum("ij,ij->i", tris[:, 0], np.cross(tris[:, 1], tris[:, 2])).sum() / 6.0
 
 
 def mass_props(tris, mass, model):
@@ -165,12 +189,15 @@ def main():
     links = {l.get("name"): l for l in root.findall("link")}
     joints = {j.get("name"): j for j in root.findall("joint")}
 
-    # meshes -> meshes/*.stl next to the URDF
+    # meshes -> meshes/*.stl next to the URDF (the file names are unique across subfolders)
     os.makedirs(MESH_DIR, exist_ok=True)
+    prefix = "package://lwa4p_description/"
     for mesh in root.iter("mesh"):
         fn = mesh.get("filename")
+        if not fn.startswith(prefix):
+            raise ValueError(f"unexpected mesh path {fn}")
         name = os.path.basename(fn)
-        shutil.copy(os.path.join(desc, "meshes", "lwa4p", name), os.path.join(MESH_DIR, name))
+        shutil.copy(os.path.join(desc, fn[len(prefix):]), os.path.join(MESH_DIR, name))
         mesh.set("filename", f"meshes/{name}")
 
     # arm: masses, COM and inertia from the meshes
@@ -179,14 +206,7 @@ def main():
         if name == "arm_podest_link":
             continue                # replaced by the real base geometry below
         link = links[name]
-        vis = link.find("visual")
-        tris = load_stl(os.path.join(MESH_DIR, os.path.basename(vis.find("geometry/mesh").get("filename"))))
-        o = vis.find("origin")
-        if o is not None:           # mesh placed with an origin (the base is flipped)
-            R = rpy_matrix(*[float(v) for v in o.get("rpy", "0 0 0").split()])
-            t = np.array([float(v) for v in o.get("xyz", "0 0 0").split()])
-            tris = tris @ R.T + t
-        com, inertia = mass_props(tris, mass, model)
+        com, inertia = mass_props(mesh_triangles(link), mass, model)
         set_inertial(link, mass, com, inertia)
         print(f"{name:22s} {mass:6.2f}  {np.round(com, 4)!s:28s} {np.round(np.diag(inertia), 5)}")
 
@@ -204,11 +224,16 @@ def main():
     # gripper: drop the MoveIt helper joint, two real finger joints
     root.remove(joints["gripper_joint"])
     root.remove(links["gripper_gap_link"])
-    for side, sign in (("left", -1), ("right", 1)):
+    for side in ("left", "right"):
         j = joints[f"gripper_finger_{side}_joint"]
-        for m in j.findall("mimic"):
-            j.remove(m)
-        j.find("axis").set("xyz", f"{sign} 0 0")          # positive = opening
+        mimic = j.find("mimic")
+        if abs(abs(float(mimic.get("multiplier"))) - 0.5) > 1e-9 or float(mimic.get("offset", 0)) != 0:
+            raise ValueError(f"{j.get('name')}: expected the mimic gripper_joint * +-0.5")
+        # joint value = gap / 2, so flip the axis where the mimic multiplier is negative
+        opening = math.copysign(1.0, float(mimic.get("multiplier")))
+        j.remove(mimic)
+        axis = opening * np.array([float(v) for v in j.find("axis").get("xyz").split()])
+        j.find("axis").set("xyz", " ".join(f"{v:g}" for v in axis + 0.0))   # positive = opening
         lim = j.find("limit")
         lim.set("lower", "0.0")
         lim.set("upper", f"{FINGER_TRAVEL:.5f}")
@@ -217,20 +242,29 @@ def main():
     print(f"gripper fingers 0..{FINGER_TRAVEL * 1000:.2f} mm each (gap 0..{2 * FINGER_TRAVEL * 1000:.1f} mm), "
           f"{FINGER_FORCE:.0f} N, {FINGER_VEL} m/s")
 
-    # gripper + camera: mass and inertia from the geometry
-    jaw = primitives(links["gripper_finger_left_link"])[0]
-    jaw_mass = volume(jaw[0], jaw[1]) * ALU
-    mass_of = {
-        "gripper_adapter_link": lambda k, d, i: volume(k, d) * ALU,
-        "gripper_body_link": lambda k, d, i: WSG_MASS - 2 * jaw_mass,
-        "gripper_finger_left_link": lambda k, d, i: volume(k, d) * ALU,     # [0] jaw, [1] finger
-        "gripper_finger_right_link": lambda k, d, i: volume(k, d) * ALU,
-        "camera_link": lambda k, d, i: 0.072,
+    # gripper, sensor and camera: mass and inertia from the geometry
+    jaw_mass = mesh_volume(mesh_triangles(links["gripper_jaw_left_link"])) * ALU
+    finger_mass = mesh_volume(mesh_triangles(links["gripper_finger_left_link"])) * ALU
+    from_mesh = {                           # link -> mass, solid body of its visual mesh
+        "fts_lwa_base_link": FTS_MASS,
+        "gripper_base_link": WSG_MASS - 2 * jaw_mass,
+        "gripper_jaw_left_link": jaw_mass,
+        "gripper_jaw_right_link": jaw_mass,
+        "gripper_finger_left_link": finger_mass,
+        "gripper_finger_right_link": finger_mass,
+    }
+    from_primitives = {                     # link -> mass, from its collision boxes/cylinders
+        "gripper_connector_link": lambda k, d: volume(k, d) * ALU,
+        "camera_link": lambda k, d: 0.072,
     }
     print(f"\n{'link':28s} {'mass':>7s}  com [m]                  principal inertia [kg m^2]")
-    for name, mass_fn in mass_of.items():
-        parts = [(mass_fn(k, d, i), k, d, c) for i, (k, d, c) in enumerate(primitives(links[name]))]
-        M, com, I = combine(parts)
+    for name in list(from_mesh) + list(from_primitives):
+        if name in from_mesh:
+            M = from_mesh[name]
+            com, I = mass_props(mesh_triangles(links[name]), M, "solid")
+        else:
+            parts = [(from_primitives[name](k, d), k, d, c) for k, d, c in primitives(links[name])]
+            M, com, I = combine(parts)
         set_inertial(links[name], M, com, I)
         print(f"{name:28s} {M:7.4f}  {np.round(com, 4)!s:24s} {np.round(np.linalg.eigvalsh(I), 7)}")
 
@@ -263,7 +297,7 @@ def main():
 
     ET.indent(root, space="  ")
     header = ("<?xml version=\"1.0\"?>\n<!-- GENERATED by isaac/tools/make_isaac_urdf.py - do not edit by hand.\n"
-              "     Schunk LWA 4P + WSG 50-110 + RealSense D435 for Isaac Sim. See isaac/README.md -->\n")
+              "     Schunk LWA 4P + FTS-LWA + WSG 50-110 + RealSense D435 for Isaac Sim. See isaac/README.md -->\n")
     open(OUT, "w").write(header + ET.tostring(root, encoding="unicode") + "\n")
     total = sum(float(l.find("inertial/mass").get("value")) for l in root.findall("link") if l.find("inertial") is not None)
     arm = sum(m for n, (m, _) in ARM.items() if n != "arm_podest_link")

@@ -6,6 +6,8 @@
      package lwa4p_project, used with the author's permission:
        description_tools/meshes/fts_lwa/*.stl (millimetres)
        schunk_lwa4p/urdf/robot.urdf.xacro (mounting, see lwa4p.urdf.xacro)
+     Sensor data (Commonplace Robotics FTS-LWA user guide, 2014): 55.35 mm
+     high, 88 mm diameter, 0.7 kg, Schunk FWS115 flanges on both sides.
      The link origin is on the gripper side of the sensor. The mesh reaches
      63.3 mm back towards the arm and 7.6 mm into the gripper connector plate.
      The collision mesh is 10 % larger than the visual one, as in the diploma. -->
@@ -31,11 +33,11 @@
           <mesh filename="package://lwa4p_description/meshes/fts_lwa/fts_lwa_collision.stl" scale="0.0011 0.0011 0.0011"/>
         </geometry>
       </collision>
-      <!-- placeholder: the sensor mass is not measured -->
+      <!-- mass from the user guide; inertia of a solid 88 x 55.35 mm cylinder -->
       <inertial>
         <origin xyz="0 0 -0.028"/>
-        <mass value="0.25"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+        <mass value="0.7"/>
+        <inertia ixx="5.2e-4" ixy="0" ixz="0" iyy="5.2e-4" iyz="0" izz="6.8e-4"/>
       </inertial>
     </link>
 
