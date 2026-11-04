@@ -17,7 +17,8 @@ from shape_msgs.msg import SolidPrimitive
 from tf2_ros import Buffer, TransformListener
 
 ARM_JOINTS = [f"arm_{i}_joint" for i in range(1, 7)]
-GRIPPER_LINKS = ["gripper_tcp", "gripper_gap_link", "gripper_body_link",
+GRIPPER_LINKS = ["gripper_tcp", "gripper_gap_link", "gripper_base_link",
+                 "gripper_jaw_left_link", "gripper_jaw_right_link",
                  "gripper_finger_left_link", "gripper_finger_right_link"]
 ERROR_NAMES = {v: k for k, v in MoveItErrorCodes.__dict__.items()
                if k.isupper() and isinstance(v, int)}
