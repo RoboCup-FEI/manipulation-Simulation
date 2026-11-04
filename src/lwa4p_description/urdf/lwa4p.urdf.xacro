@@ -102,19 +102,28 @@
                    xyz="0 0 0" rpy="-1.5708 0 0" effort="19" lower="${-lim}" upper="${lim}"/>
   <xacro:arm_link name="arm_6_link" stl="arm_6_link" material="schunk_grey"/>
 
-  <!-- tool flange face (end of the arm_6 mesh, z = 0.084) -->
+  <!-- Tool flange matching original Schunk schunk_lwa4p.urdf.xacro -->
   <joint name="arm_tool0_joint" type="fixed">
     <parent link="arm_6_link"/>
     <child link="arm_tool0"/>
-    <origin xyz="0 0 0.084" rpy="0 0 0"/>
+    <origin xyz="0 0 0.0751" rpy="0 0 3.14159"/>
   </joint>
   <link name="arm_tool0"/>
 
+  <!-- FTS-LWA Sensor -->
+  <xacro:include filename="$(find lwa4p_description)/urdf/fts_lwa.urdf.xacro"/>
+  <xacro:fts_lwa parent="arm_tool0" has_parent="true" tool_point="fts_lwa_tool_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:fts_lwa>
+
+  <!-- WSG-50 Gripper -->
   <xacro:arg name="gripper" default="true"/>
-  <!-- rotate the gripper about the flange axis if RViz doesn't match the real arm -->
   <xacro:arg name="gripper_yaw" default="1.5708"/>
   <xacro:if value="$(arg gripper)">
     <xacro:include filename="$(find lwa4p_description)/urdf/wsg50.urdf.xacro"/>
-    <xacro:wsg50 parent="arm_tool0" yaw="$(arg gripper_yaw)"/>
+    <xacro:wsg_50_xacro name="gripper" parent="fts_lwa_tool_link" tool_point="gripper_tcp">
+      <origin xyz="0 0 0" rpy="0 0 $(arg gripper_yaw)"/>
+    </xacro:wsg_50_xacro>
   </xacro:if>
+
 </robot>

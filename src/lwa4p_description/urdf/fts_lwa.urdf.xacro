@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="fts_lwa" params="parent *origin has_parent:=true tool_point:=fts_lwa_tool_link">
+    
+    <joint name="fts_lwa_joint" type="fixed">
+      <xacro:insert_block name="origin"/>
+      <parent link="${parent}"/>
+      <child link="fts_lwa_base_link"/>
+    </joint>
+
+    <link name="fts_lwa_base_link">
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.25"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://lwa4p_description/meshes/fts_lwa/fts_lwa.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="schunk_grey"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://lwa4p_description/meshes/fts_lwa/fts_lwa_collision.stl" scale="0.0011 0.0011 0.0011"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="fts_lwa_end_joint" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="fts_lwa_base_link"/>
+      <child link="${tool_point}"/>
+    </joint>
+
+    <link name="${tool_point}"/>
+
+  </xacro:macro>
+</robot>
