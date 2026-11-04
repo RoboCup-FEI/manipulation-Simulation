@@ -89,7 +89,7 @@ Repeat them before relying on them. Its Gazebo physics results do not carry over
 
 | Package | Type | Role |
 |---|---|---|
-| `lwa4p_description` | ament_cmake (data only) | Xacro for the arm, the WSG 50 (`wsg50.urdf.xacro`) and the D435 (`realsense_d435.urdf.xacro`), plus meshes and `display.launch.py`. The base xacro has **no camera**; the camera is added by `lwa4p_gazebo`. |
+| `lwa4p_description` | ament_cmake (data only) | Xacro for the arm, the FTS-LWA force/torque sensor (`fts_lwa.urdf.xacro`), the WSG 50 (`wsg50.urdf.xacro`) and the D435 (`realsense_d435.urdf.xacro`), plus meshes and `display.launch.py`. The sensor and gripper meshes come from Patrik Bakyta's 2018 STU FEI diploma project, used with his permission; the root MIT license does not cover them. The base xacro has **no camera**; the camera is added by `lwa4p_gazebo`. |
 | `lwa4p_driver` | ament_python | Real hardware. `driver` = CANopen CiA 402 arm driver (`driver_node.py` + `ds402.py`). `gripper` = WSG 50 node (`gripper_node.py` + `wsg50.py`, a raw binary protocol over CAN). CLIs `test_move` and `gripper_cmd`. Launch file: `bringup.launch.py`. |
 | `lwa4p_moveit_config` | ament_cmake | Setup Assistant output: SRDF, kinematics, joint limits, controllers. `demo.launch.py` (mock hardware), `real.launch.py` (driver + move_group + RViz). |
 | `lwa4p_gazebo` | ament_cmake + scripts | **To be removed (§7).** Gazebo world, `gazebo.launch.py`, sim controllers, and the Python user API `scripts/simple_moveit.py` plus the demos `go_to.py`, `pick_tube.py`, `bin_pick.py` and the sim helper `finger_mimic.py`. |
@@ -141,11 +141,22 @@ Consequences:
 
 - `world` = URDF root = the robot base frame, 0.10 m below the shoulder axes. The real
   mounting surface is at **z = −0.105**, and the Isaac table top is at about −0.105.
-- `arm_tool0` = flange. `gripper_tcp` = between the fingertips, **15 mm above the tips**. This
-  is the IK tip of the `arm` group (chain `arm_base_link → gripper_tcp`) and the frame all
-  grasp poses use. The flange-to-TCP distance is about 0.251 m.
-- The gripper is mounted with `gripper_yaw` = π/2 about the flange axis (a xacro arg on
-  `lwa4p.urdf.xacro`). The fingers close along the TCP x-axis.
+- `arm_tool0` = flange, 75.1 mm above `arm_6_link` and **turned by π** about its z-axis (from
+  the 2018 diploma model). On it sit the FTS-LWA force/torque sensor (`fts_lwa_base_link`,
+  55.35 mm above the flange, turned 0.7 rad), a 14 mm connector plate and the WSG 50. The sensor
+  is geometry only: nothing publishes force or torque data.
+- `gripper_tcp` = between the finger pads, **9.5 mm above the fingertips**. This is the IK tip
+  of the `arm` group (chain `arm_base_link → gripper_tcp`) and the frame all grasp poses use.
+  `arm_6_link → gripper_tcp` is 0.28945 m along z, turned +π/2; `arm_tool0 → gripper_tcp` is
+  0.21435 m, turned −π/2. From axis 5 to the fingertips the model has 299 mm, and about 300 mm
+  was measured on the real robot. Prefer `arm_6_link` as the reference for calibration results.
+- The fingers close along the TCP x-axis. `gripper_yaw` (a xacro arg on `lwa4p.urdf.xacro`,
+  default π/2) is that direction about the tool axis, measured from the x-axis of
+  `arm_6_link`, not of `arm_tool0`. The finger direction has not been checked visually on the
+  real robot yet.
+- The finger meshes are the diploma's fingers (tips reworked for tubes); the real robot has
+  standard FMF fingers. The model puts the pads where the real ones are, so it draws the base
+  jaws 6.75 mm closer to the centre than the real ones.
 - "Pointing down" in `SimpleMoveIt.pose()` is the quaternion `(x=cos(yaw/2), y=sin(yaw/2),
   z=0, w=0)`, i.e. a 180° flip about a horizontal axis, where `yaw` is the finger closing
   direction. With `yaw=None` the tool's z rotation is free (tolerance π).
@@ -244,7 +255,7 @@ section 13.3 lists the remaining work.
 - Override with the env vars `ISAACSIM_PATH`, `ROS_DOMAIN_ID` (default 68),
   `LWA4P_ISAAC_CACHE` and `LWA4P_ISAAC_REPORT_DIR`.
 - `isaac/lwa4p_cfg.py` is an **unvalidated** Isaac Lab 2.x template. `READY` puts the TCP at
-  about (0.40, 0, 0.30), pointing down.
+  about (0.40, 0, 0.26), pointing down.
 
 ## 9. Build, run and verify
 
@@ -305,7 +316,7 @@ place to add tests.
 | If you change… | …also update |
 |---|---|
 | Joint names, groups or named states (SRDF) | `simple_moveit.py` (reads the SRDF at runtime for `named()`), `go_to.py` docs, `prepare.py` (assumes the gripper group/state layout), the MTC task (uses `arm`, `wsg50`, `gripper_tcp`, `tube_15mm`, `open`), `driver.yaml` `joint_names` |
-| Gripper geometry or offset (`wsg50.urdf.xacro`) | `gripper.yaml` `finger_offset_mm`, `bin_pick.py` `FINGER_T`/`FINGER_W`/`TCP_ABOVE_FINGERTIP`, regenerate the Isaac URDF, the `0.0425` checks in `joint_motion_verification.cpp` and `prepare.py` `READY` |
+| Gripper or sensor geometry or offset (`wsg50.urdf.xacro`, `fts_lwa.urdf.xacro`, the tool mounting in `lwa4p.urdf.xacro`) | `gripper.yaml` `finger_offset_mm`, `bin_pick.py` `FINGER_T`/`FINGER_W`/`TCP_ABOVE_FINGERTIP`, regenerate the Isaac URDF, the `0.0425` checks in `joint_motion_verification.cpp` and `prepare.py` `READY` |
 | Camera pose | the `realsense_d435` call in `lwa4p_gazebo.urdf.xacro`, `isaac/README.md` §3, regenerate the Isaac URDF |
 | World objects | `isaac/moveit/simulation.py`, `isaac/moveit/planning_scene.py`, `isaac/README.md` §4 |
 | Controller names | the `moveit_controllers.yaml` files, `lwa4p_moveit_config/config/ros2_controllers.yaml`, `isaac/moveit/controllers.yaml`, the driver `controller_name`, the gripper action name in `gripper_node.py` |

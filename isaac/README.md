@@ -50,8 +50,8 @@ robot_cfg = LWA4P_REAL_SPEED_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 | Frame | Meaning |
 |---|---|
 | `world` | URDF root = robot base frame, 0.10 m below the shoulder axes. The **mounting surface** (bottom of the base) is at **z = −0.105 m** |
-| `arm_tool0` | tool flange |
-| `gripper_tcp` | **tool centre point**: between the fingertips, 15 mm above the tips. All grasp poses use this frame |
+| `arm_tool0` | tool flange, 75.1 mm above `arm_6_link` and turned by π. The FTS-LWA force/torque sensor and the gripper sit on it |
+| `gripper_tcp` | **tool centre point**: between the finger pads, 9.5 mm above the fingertips. All grasp poses use this frame |
 | `camera_link` / `camera_color_optical_frame` | RealSense, see §3 |
 
 The kinematics come from ipa320/schunk_modular_robotics. I checked them against SCHUNK's dimension drawing (manual §3.1), measured from the mounting surface:
@@ -61,8 +61,7 @@ The kinematics come from ipa320/schunk_modular_robotics. I checked them against 
 | Axes 1/2 (shoulder) | 205 mm | 0.205 ✓ (the root is 0.105 above the mounting surface) |
 | Axes 3/4 (elbow) | 555 mm → upper arm 350 mm | 0.350 ✓ |
 | Axes 5/6 (wrist) | 860 mm → forearm 305 mm | 0.305 ✓ |
-| Flange top | 945 mm → 85 mm above the wrist | 0.084 ✓ |
-| Tool flange | Ø 65 mm | adapter Ø 65 ✓ |
+| Flange top | 935 / 945 mm → 75 / 85 mm above the wrist | `arm_tool0` at 0.0751, the sensor mounting face from the 2018 diploma model. The `arm_6` mesh ends at 0.084 |
 | Base | foot Ø 186 mm | foot Ø 186, column Ø 130 (simplified) |
 
 The kinematics have not been calibrated to this specific arm.
@@ -102,14 +101,16 @@ Sources:
 | `arm_5_link` | ERB 115 double-axis module (axes 5–6) | 1.5 kg | 1.8 kg module − flange, estimated |
 | `arm_6_link` | ERB 115 output / tool flange | 0.3 kg | estimated |
 | **Arm total** | | **12.0 kg** | SCHUNK manual: 12 kg without base |
-| `gripper_body_link` | WSG 50 housing (1.15 kg WSG − 2 base jaws) | 1.08 kg | WSG manual: 1.15 kg |
-| `gripper_finger_*_link` | base jaw (35 g) + finger (106 g), aluminium by volume | 2 × 0.141 kg | jaw: WSG drawing; finger: **not measured** |
-| `gripper_adapter_link` | adapter plate Ø65 × 20 mm, aluminium | 0.179 kg | **not measured** |
+| `fts_lwa_base_link` | FTS-LWA force/torque sensor | 0.70 kg | Commonplace Robotics user guide |
+| `gripper_connector_link` | connector plate Ø60 × 14 mm, aluminium | 0.107 kg | **not measured** |
+| `gripper_base_link` | WSG 50 housing (1.15 kg WSG − 2 base jaws) | 1.10 kg | WSG manual: 1.15 kg |
+| `gripper_jaw_*_link` | base jaw, aluminium by mesh volume | 2 × 0.025 kg | mesh |
+| `gripper_finger_*_link` | finger, aluminium by mesh volume | 2 × 0.045 kg | **not measured** |
 | `camera_link` | RealSense D435 | 0.072 kg | Intel |
 
-- **Gripper and camera inertias** are computed from their box and cylinder geometry, using the masses above.
+- **Sensor, housing, jaw and finger inertias** are computed from their meshes as solid bodies, and the connector plate and camera inertias from their cylinder and box geometry, using the masses above.
 - **Arm centres of mass and inertia tensors** are computed from the meshes. The modules are treated as solid bodies (they're full of motors and gears) and the tubes as thin shells (they're hollow aluminium).
-- **Check against the datasheet:** stretched out horizontally with the gripper, joint 2 needs 44 Nm for the arm alone, and 70 Nm with 3 kg in the gripper, which is above the 64 Nm maximum. That fits SCHUNK's "3–6 kg depending on deflection", which is rated at the flange without a gripper.
+- **Check against the datasheet:** stretched out horizontally with the sensor and gripper, joint 2 needs about 49 Nm for the arm alone, and 77 Nm with 3 kg in the gripper, which is above the 64 Nm maximum. That fits SCHUNK's "3–6 kg depending on deflection", which is rated at the flange without a gripper.
 
 ### Gripper
 
@@ -129,11 +130,13 @@ command both fingers with gap / 2
 | Base jaws | stick out to 96.5 mm above the mounting face (24 mm above the housing), ~18 mm wide in x | WSG manual |
 | Jaw stroke | jaw inner faces 0 … 110 mm apart (55 mm per jaw), centred | WSG manual |
 | Fingers | reach 9.75 mm further inwards than each jaw → **fingertip gap = jaw width − 19.5 mm**, 0 … 90.5 mm (the real gripper reports up to ~109 mm jaw width after homing, so ~89.5 mm gap) | measured on the real gripper |
-| Adapter (flange → housing) | 20 mm | **not measured yet** |
-| Base jaw depth (y) | 30 mm | **not measured yet** |
-| Finger size | 20 thick × 30 wide × 65.5 mm above the jaw; tips 162 mm above the housing bottom | **not measured yet** |
+| Force/torque sensor | FTS-LWA, 55.35 mm high, Ø 88 mm, 0.7 kg. Mounted 55.35 mm above the flange, turned 0.7 rad | user guide; mounting from the diploma model |
+| Connector plate (sensor → housing) | Ø 60 × 14 mm | diploma model, **not measured** |
+| Base jaws and fingers | meshes from the diploma. Finger 23 mm thick from the pad to the outer face, 30 mm wide; tips 154.5 mm above the housing bottom; the pads stick out 3 mm past the base jaw | diploma meshes, **not measured** |
 
-`gripper_tcp` is 0.147 m above the housing bottom, which is 0.251 m from the tool flange with the 20 mm adapter. The values marked *not measured yet* are set in `src/lwa4p_description/urdf/wsg50.urdf.xacro`. Measure them on the real gripper, change them there, and regenerate (§7).
+`gripper_tcp` is 145 mm above the housing bottom, at the centre of the finger pads and 9.5 mm above the tips. It is 214.35 mm from `arm_tool0` and 289.45 mm from `arm_6_link`. From axis 5 to the fingertips that is 299 mm; about 300 mm was measured on the real robot with a ruler.
+
+The meshes and the mounting come from Patrik Bakyta's diploma project (STU FEI, 2018), used with his permission. His fingers have tips reworked for tubes, while the real robot has standard FMF fingers. The model keeps the pads where the real ones are, so it draws the base jaws 6.75 mm closer to the centre than the real ones. The geometry is set in `src/lwa4p_description/urdf/wsg50.urdf.xacro` and `fts_lwa.urdf.xacro`. Change it there and regenerate (§7).
 
 ---
 

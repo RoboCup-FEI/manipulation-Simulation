@@ -140,7 +140,7 @@ Use the same file with `gazebo:=false` for the real camera mount.
 - **Reach:** with the gripper pointing down, the arm reaches about 0.55 m from
   its base at table height. Farther points fail with `INVALID_MOTION_PLAN` or
   `NO_IK_SOLUTION`.
-- **`gripper_tcp`** is the point between the fingertips, 15 mm up from the
+- **`gripper_tcp`** is the point between the finger pads, 9.5 mm up from the
   tips. `pose()` moves that point.
 - **Grasping:** command a gap a little smaller than the part. The fingers stop
   at the part and squeeze it, much like the real WSG grasp.
