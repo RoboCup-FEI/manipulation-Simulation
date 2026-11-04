@@ -1,72 +1,91 @@
 <?xml version="1.0"?>
+<!-- Weiss/Schunk WSG 50-110 with its connector plate.
+
+     Meshes and assembly from Patrik Bakyta's diploma project (STU FEI, 2018),
+     package lwa4p_project (description_tools/urdf/wsg_50.urdf.xacro), used
+     with the author's permission. WSG50_BASE_110 is in metres, the jaw and
+     finger meshes are in millimetres.
+
+     Heights above the housing bottom (gripper_base_link):
+       housing top 72.5 mm, base jaws up to 96.5 mm, fingertips 154.5 mm,
+       gripper_tcp 145 mm = centre of the finger pads, 9.5 mm above the tips.
+     The 14 mm connector plate sits between the sensor and the housing.
+     From axis 5 to the fingertips this gives 299 mm; the real robot measured
+     about 300 mm (ruler, 2026-11-02).
+
+     gripper_joint = fingertip GAP in metres (the same number the gripper node,
+     MoveIt and the SRDF states use). Each finger joint mimics half of it.
+     The finger pads stick out pad_inset = 3 mm inwards past the base jaw in
+     these meshes, so every jaw + finger is mounted 3 mm further out: at
+     gripper_joint = 0 the pads touch.
+     These are the diploma's fingers, with tips reworked for tubes. The real
+     robot has standard FMF fingers, whose pads sit 9.75 mm inside the jaw
+     (gripper.yaml finger_offset_mm 19.5). The model therefore draws the base
+     jaws 6.75 mm closer to the centre than the real ones; the pads and the TCP
+     are where the real gripper has them. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:macro name="wsg_50_xacro" params="name parent *origin tool_point">
-    
-    <!-- Connector plate from original Schunk assembly -->
-    <joint name="${name}_connector_gripper_joint" type="fixed">
+    <xacro:property name="wsg_mesh" value="package://lwa4p_description/meshes/wsg_50"/>
+    <xacro:property name="mm" value="0.001 0.001 0.001"/>
+    <xacro:property name="connector_h" value="0.014"/>
+    <xacro:property name="pad_inset" value="0.003"/>
+    <xacro:property name="gap_max" value="0.0895"/>
+
+    <material name="wsg_grey"><color rgba="0.6 0.6 0.62 1.0"/></material>
+    <material name="wsg_black"><color rgba="0.1 0.1 0.1 1.0"/></material>
+
+    <joint name="${name}_connector_joint" type="fixed">
       <xacro:insert_block name="origin"/>
       <parent link="${parent}"/>
       <child link="${name}_connector_link"/>
     </joint>
-
     <link name="${name}_connector_link">
-      <inertial>
-        <mass value="0.01"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-      </inertial>
       <visual>
-        <origin rpy="0 0 0" xyz="0 0 0.007"/>
-        <geometry>
-          <cylinder length="0.014" radius="0.030"/>
-        </geometry>
-        <material name="schunk_grey"/>
+        <origin xyz="0 0 ${connector_h / 2}"/>
+        <geometry><cylinder radius="0.030" length="${connector_h}"/></geometry>
+        <material name="wsg_grey"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 0.007"/>
-        <geometry>
-          <cylinder length="0.014" radius="0.030"/>
-        </geometry>
+        <origin xyz="0 0 ${connector_h / 2}"/>
+        <geometry><cylinder radius="0.030" length="${connector_h}"/></geometry>
       </collision>
+      <inertial>
+        <origin xyz="0 0 ${connector_h / 2}"/>
+        <mass value="0.1"/>
+        <inertia ixx="2.4e-5" ixy="0" ixz="0" iyy="2.4e-5" iyz="0" izz="4.5e-5"/>
+      </inertial>
     </link>
 
-    <joint name="${name}_anterior_gripper_joint" type="fixed">
-      <origin xyz="0 0 0.014" rpy="0 0 0"/>
+    <joint name="${name}_base_joint" type="fixed">
       <parent link="${name}_connector_link"/>
       <child link="${name}_base_link"/>
+      <origin xyz="0 0 ${connector_h}" rpy="0 0 0"/>
     </joint>
-
-    <!-- Base link -->
+    <!-- housing; the collision mesh is 5 % larger, as in the diploma -->
     <link name="${name}_base_link">
-      <inertial>
-        <mass value="0.95"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="1e-3" ixy="0" ixz="0" iyy="1e-3" iyz="0" izz="1e-3"/>
-      </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/WSG50_BASE_110.stl" scale="1 1 1"/>
-        </geometry>
-        <material name="schunk_grey"/>
+        <geometry><mesh filename="${wsg_mesh}/WSG50_BASE_110.stl"/></geometry>
+        <material name="wsg_grey"/>
       </visual>
       <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/WSG50_BASE_110_collision.stl" scale="1.05 1.05 1.05"/>
-        </geometry>
+        <geometry><mesh filename="${wsg_mesh}/WSG50_BASE_110_collision.stl" scale="1.05 1.05 1.05"/></geometry>
       </collision>
+      <inertial>
+        <origin xyz="0 0 0.03625"/>
+        <mass value="0.95"/>
+        <inertia ixx="6.1e-4" ixy="0" ixz="0" iyy="2.1e-3" iyz="0" izz="1.9e-3"/>
+      </inertial>
     </link>
 
-    <!-- Command joint for ros2_control -->
+    <!-- the commanded joint: fingertip gap. Its link carries no geometry
+         (tiny inertial only so that Gazebo keeps the joint). -->
     <joint name="${name}_joint" type="prismatic">
       <parent link="${name}_base_link"/>
       <child link="${name}_gap_link"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <axis xyz="1 0 0"/>
-      <limit lower="0.0" upper="0.110" effort="80" velocity="0.42"/>
+      <limit lower="0.0" upper="${gap_max}" effort="80" velocity="0.42"/>
     </joint>
-
     <link name="${name}_gap_link">
       <inertial>
         <mass value="0.01"/>
@@ -74,131 +93,64 @@
       </inertial>
     </link>
 
-    <!-- Left finger base -->
-    <joint name="${name}_finger_left_joint" type="prismatic">
-      <parent link="${name}_base_link"/>
-      <child link="${name}_gripper_left"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <axis xyz="1 0 0"/>
-      <limit lower="-0.055" upper="0.055" effort="80" velocity="0.42"/>
-      <mimic joint="${name}_joint" multiplier="-0.5" offset="0"/>
-    </joint>
+    <!-- one side = base jaw + finger. The jaw frame is on the housing bottom
+         plane, its x axis points to the centre of the gripper; the jaw meshes
+         reach towards -x. The right side is the left one turned by pi. -->
+    <xacro:macro name="wsg_finger" params="side sign yaw">
+      <joint name="${name}_finger_${side}_joint" type="prismatic">
+        <parent link="${name}_base_link"/>
+        <child link="${name}_jaw_${side}_link"/>
+        <origin xyz="${sign * pad_inset} 0 0" rpy="0 0 ${yaw}"/>
+        <axis xyz="${-sign} 0 0"/>
+        <limit lower="${-gap_max}" upper="${gap_max}" effort="80" velocity="0.42"/>
+        <mimic joint="${name}_joint" multiplier="${sign * 0.5}" offset="0"/>
+      </joint>
+      <link name="${name}_jaw_${side}_link">
+        <visual>
+          <geometry><mesh filename="${wsg_mesh}/FINGERHOLD_WSG50.stl" scale="${mm}"/></geometry>
+          <material name="wsg_black"/>
+        </visual>
+        <collision>
+          <geometry><mesh filename="${wsg_mesh}/FINGERHOLD_WSG50_collision.stl" scale="${mm}"/></geometry>
+        </collision>
+        <inertial>
+          <origin xyz="-0.008 0 0.08"/>
+          <mass value="0.035"/>
+          <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+        </inertial>
+      </link>
 
-    <link name="${name}_gripper_left">
-      <inertial>
-        <mass value="0.1"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-      </inertial>
-      <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/FINGERHOLD_WSG50.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="schunk_grey"/>
-      </visual>
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/FINGERHOLD_WSG50.stl" scale="0.00105 0.00105 0.00105"/>
-        </geometry>
-      </collision>
-    </link>
+      <joint name="${name}_finger_${side}_mount_joint" type="fixed">
+        <parent link="${name}_jaw_${side}_link"/>
+        <child link="${name}_finger_${side}_link"/>
+        <origin xyz="0 0 0.023" rpy="0 0 0"/>
+      </joint>
+      <link name="${name}_finger_${side}_link">
+        <visual>
+          <origin xyz="0 0 0.001"/>
+          <geometry><mesh filename="${wsg_mesh}/WSG50_FINGER.stl" scale="${mm}"/></geometry>
+          <material name="wsg_black"/>
+        </visual>
+        <collision>
+          <origin xyz="0 0 0.001"/>
+          <geometry><mesh filename="${wsg_mesh}/WSG50_FINGER_collision.stl" scale="${mm}"/></geometry>
+        </collision>
+        <inertial>
+          <origin xyz="-0.008 0 0.1"/>
+          <mass value="0.1"/>
+          <inertia ixx="5e-5" ixy="0" ixz="0" iyy="5.5e-5" iyz="0" izz="1.5e-5"/>
+        </inertial>
+      </link>
+    </xacro:macro>
+    <xacro:wsg_finger side="left" sign="-1" yaw="0"/>
+    <xacro:wsg_finger side="right" sign="1" yaw="${pi}"/>
 
-    <!-- Left finger tip -->
-    <joint name="${name}_guide_joint_finger_left" type="fixed">
-      <origin xyz="0 0 0.023" rpy="0 0 0"/>
-      <parent link="${name}_gripper_left"/>
-      <child link="${name}_finger_left_link"/>
-    </joint>
-
-    <link name="${name}_finger_left_link">
-      <inertial>
-        <mass value="0.1"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-      </inertial>
-      <visual>
-        <origin xyz="0 0 0.001" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/WSG50_FINGER.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="schunk_grey"/>
-      </visual>
-      <collision>
-        <origin xyz="-0.001 0 0.001" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/WSG50_FINGER.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-      </collision>
-    </link>
-
-    <!-- Right finger base -->
-    <joint name="${name}_finger_right_joint" type="prismatic">
-      <parent link="${name}_base_link"/>
-      <child link="${name}_gripper_right"/>
-      <origin xyz="0 0 0" rpy="0 0 3.14159"/>
-      <axis xyz="-1 0 0"/>
-      <limit lower="-0.055" upper="0.055" effort="80" velocity="0.42"/>
-      <mimic joint="${name}_joint" multiplier="0.5" offset="0"/>
-    </joint>
-
-    <link name="${name}_gripper_right">
-      <inertial>
-        <mass value="0.1"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-      </inertial>
-      <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/FINGERHOLD_WSG50.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="schunk_grey"/>
-      </visual>
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/FINGERHOLD_WSG50.stl" scale="0.00105 0.00105 0.00105"/>
-        </geometry>
-      </collision>
-    </link>
-
-    <!-- Right finger tip -->
-    <joint name="${name}_guide_joint_finger_right" type="fixed">
-      <origin xyz="0 0 0.023" rpy="0 0 0"/>
-      <parent link="${name}_gripper_right"/>
-      <child link="${name}_finger_right_link"/>
-    </joint>
-
-    <link name="${name}_finger_right_link">
-      <inertial>
-        <mass value="0.1"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-      </inertial>
-      <visual>
-        <origin xyz="0 0 0.001" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/WSG50_FINGER.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="schunk_grey"/>
-      </visual>
-      <collision>
-        <origin xyz="-0.001 0 0.001" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://lwa4p_description/meshes/wsg_50/WSG50_FINGER.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-      </collision>
-    </link>
-
-    <!-- Tool center point -->
+    <!-- tool centre point: between the finger pads, 9.5 mm above the tips -->
     <joint name="${name}_tcp_joint" type="fixed">
-      <origin xyz="0 0 0.145" rpy="0 0 0"/>
       <parent link="${name}_base_link"/>
       <child link="${tool_point}"/>
+      <origin xyz="0 0 0.145" rpy="0 0 0"/>
     </joint>
     <link name="${tool_point}"/>
-
   </xacro:macro>
 </robot>

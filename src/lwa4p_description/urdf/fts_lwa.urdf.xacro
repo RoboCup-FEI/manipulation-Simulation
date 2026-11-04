@@ -1,7 +1,18 @@
 <?xml version="1.0"?>
+<!-- SCHUNK FTS-LWA force/torque sensor (FTM-75) between the LWA 4P flange and
+     the WSG 50. Geometry only: no driver publishes force or torque data yet.
+
+     Meshes and mounting from Patrik Bakyta's diploma project (STU FEI, 2018),
+     package lwa4p_project, used with the author's permission:
+       description_tools/meshes/fts_lwa/*.stl (millimetres)
+       schunk_lwa4p/urdf/robot.urdf.xacro (mounting, see lwa4p.urdf.xacro)
+     The link origin is on the gripper side of the sensor. The mesh reaches
+     63.3 mm back towards the arm and 7.6 mm into the gripper connector plate.
+     The collision mesh is 10 % larger than the visual one, as in the diploma. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="fts_lwa" params="parent *origin has_parent:=true tool_point:=fts_lwa_tool_link">
-    
+  <xacro:macro name="fts_lwa" params="parent *origin tool_point:=fts_lwa_tool_link">
+    <material name="fts_black"><color rgba="0.15 0.15 0.15 1.0"/></material>
+
     <joint name="fts_lwa_joint" type="fixed">
       <xacro:insert_block name="origin"/>
       <parent link="${parent}"/>
@@ -9,33 +20,30 @@
     </joint>
 
     <link name="fts_lwa_base_link">
-      <inertial>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <mass value="0.25"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-      </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
           <mesh filename="package://lwa4p_description/meshes/fts_lwa/fts_lwa.stl" scale="0.001 0.001 0.001"/>
         </geometry>
-        <material name="schunk_grey"/>
+        <material name="fts_black"/>
       </visual>
       <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
           <mesh filename="package://lwa4p_description/meshes/fts_lwa/fts_lwa_collision.stl" scale="0.0011 0.0011 0.0011"/>
         </geometry>
       </collision>
+      <!-- placeholder: the sensor mass is not measured -->
+      <inertial>
+        <origin xyz="0 0 -0.028"/>
+        <mass value="0.25"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      </inertial>
     </link>
 
     <joint name="fts_lwa_end_joint" type="fixed">
-      <origin xyz="0 0 0" rpy="0 0 0"/>
       <parent link="fts_lwa_base_link"/>
       <child link="${tool_point}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
-
     <link name="${tool_point}"/>
-
   </xacro:macro>
 </robot>
