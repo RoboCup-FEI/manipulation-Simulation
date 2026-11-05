@@ -368,10 +368,15 @@ class Lwa4pDriver(Node):
                          f"  ~{v['current_est_a']} A")
             lines.append(f"{line}  {s.message}")
         level = max(s.level for s in arr.status)
+        text = "\n".join(lines)
+        # one call site per severity: rclpy raises ValueError if a call site changes severity
         log = self.get_logger()
-        out = (log.error if level >= DiagnosticStatus.ERROR else
-               log.warn if level >= DiagnosticStatus.WARN else log.info)
-        out("\n".join(lines))
+        if level >= DiagnosticStatus.ERROR:
+            log.error(text)
+        elif level >= DiagnosticStatus.WARN:
+            log.warn(text)
+        else:
+            log.info(text)
 
     def joint_diagnostics(self, i):
         n = self.nodes[i]
