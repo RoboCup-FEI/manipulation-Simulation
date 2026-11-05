@@ -3,7 +3,8 @@
      the WSG 50. Geometry only: no driver publishes force or torque data yet.
 
      Meshes and mounting from Patrik Bakyta's diploma project (STU FEI, 2018),
-     package lwa4p_project, used with the author's permission:
+     package lwa4p_project, used with his permission. Where he got the mesh
+     from is not known (it is not in ipa320/schunk_modular_robotics):
        description_tools/meshes/fts_lwa/*.stl (millimetres)
        schunk_lwa4p/urdf/robot.urdf.xacro (mounting, see lwa4p.urdf.xacro)
      Sensor data (Commonplace Robotics FTS-LWA user guide, 2014): 55.35 mm

@@ -136,7 +136,7 @@ command both fingers with gap / 2
 
 `gripper_tcp` is 145 mm above the housing bottom, at the centre of the finger pads and 9.5 mm above the tips. It is 214.35 mm from `arm_tool0` and 289.45 mm from `arm_6_link`. From axis 5 to the fingertips that is 299 mm; about 300 mm was measured on the real robot with a ruler.
 
-The meshes and the mounting come from Patrik Bakyta's diploma project (STU FEI, 2018), used with his permission. His fingers have tips reworked for tubes, while the real robot has standard FMF fingers. The model keeps the pads where the real ones are, so it draws the base jaws 6.75 mm closer to the centre than the real ones. The geometry is set in `src/lwa4p_description/urdf/wsg50.urdf.xacro` and `fts_lwa.urdf.xacro`. Change it there and regenerate (§7).
+The meshes and the mounting come from Patrik Bakyta's diploma project (STU FEI, 2018), used with his permission. His gripper meshes are the Weiss Robotics WSG 50 ROS package meshes (`nalt/wsg50-ros-pkg`) with the standard FMF finger; where the sensor mesh comes from is not known. In the FMF mesh the pads stick out 3 mm past the base jaw, while on the real gripper they sit 9.75 mm inside it (finger offset 19.5 mm). The model keeps the pads where the real ones are, so it draws the base jaws 6.75 mm closer to the centre than the real ones. The geometry is set in `src/lwa4p_description/urdf/wsg50.urdf.xacro` and `fts_lwa.urdf.xacro`. Change it there and regenerate (§7).
 
 ---
 

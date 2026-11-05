@@ -1,10 +1,15 @@
 <?xml version="1.0"?>
 <!-- Weiss/Schunk WSG 50-110 with its connector plate.
 
-     Meshes and assembly from Patrik Bakyta's diploma project (STU FEI, 2018),
-     package lwa4p_project (description_tools/urdf/wsg_50.urdf.xacro), used
-     with the author's permission. WSG50_BASE_110 is in metres, the jaw and
-     finger meshes are in millimetres.
+     Taken from Patrik Bakyta's diploma project (STU FEI, 2018), package
+     lwa4p_project (description_tools/urdf/wsg_50.urdf.xacro), used with his
+     permission. His meshes and xacro come from the Weiss Robotics WSG 50 ROS
+     package (github.com/nalt/wsg50-ros-pkg, based on
+     code.google.com/p/wsg50-ros-pkg; no license file there): WSG50_BASE_110 =
+     WSG50_110.stl, FINGERHOLD_WSG50 = GUIDE_WSG50_110.stl (base jaw) and
+     WSG50_FINGER = WSG-FMF.stl (standard FMF finger), the same triangles
+     re-exported. WSG50_BASE_110 is in metres, the jaw and finger meshes are in
+     millimetres.
 
      Heights above the housing bottom (gripper_base_link):
        housing top 72.5 mm, base jaws up to 96.5 mm, fingertips 154.5 mm,
@@ -15,14 +20,13 @@
 
      gripper_joint = fingertip GAP in metres (the same number the gripper node,
      MoveIt and the SRDF states use). Each finger joint mimics half of it.
-     The finger pads stick out pad_inset = 3 mm inwards past the base jaw in
+     The FMF pads stick out pad_inset = 3 mm inwards past the base jaw in
      these meshes, so every jaw + finger is mounted 3 mm further out: at
      gripper_joint = 0 the pads touch.
-     These are the diploma's fingers, with tips reworked for tubes. The real
-     robot has standard FMF fingers, whose pads sit 9.75 mm inside the jaw
-     (gripper.yaml finger_offset_mm 19.5). The model therefore draws the base
-     jaws 6.75 mm closer to the centre than the real ones; the pads and the TCP
-     are where the real gripper has them. -->
+     On the real gripper the pads sit 9.75 mm inside the jaw (gripper.yaml
+     finger_offset_mm 19.5), which does not match the 3 mm of the mesh. The
+     model keeps the pads and the TCP where the real gripper has them, so it
+     draws the base jaws 6.75 mm closer to the centre than the real ones. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:macro name="wsg_50_xacro" params="name parent *origin tool_point">
     <xacro:property name="wsg_mesh" value="package://lwa4p_description/meshes/wsg_50"/>
