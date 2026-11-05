@@ -9,10 +9,10 @@ your Isaac Lab version; the numbers are the part that matters.
 
 Joints (rad / m):
     arm_1_joint .. arm_6_joint           revolute, limits in the URDF
-    gripper_finger_left_joint            prismatic 0 .. 0.04475 (opening)
-    gripper_finger_right_joint           prismatic 0 .. 0.04475 (opening)
+    gripper_finger_left_joint            prismatic 0 .. 0.04525 (opening)
+    gripper_finger_right_joint           prismatic 0 .. 0.04525 (opening)
     fingertip gap = left + right         (the real gripper reports this gap)
-Frames: gripper_tcp (between the fingertips, 15 mm above the tips),
+Frames: gripper_tcp (between the finger pads, 9.5 mm above the tips),
         camera_color_optical_frame (RealSense, ROS optical convention).
 """
 import math
@@ -35,7 +35,7 @@ REAL_SPEED = 0.5            # rad/s  (MoveIt limits; also 0.4 rad/s^2)
 
 HOME = {f"arm_{i}_joint": 0.0 for i in range(1, 7)} | {
     "gripper_finger_left_joint": 0.0425, "gripper_finger_right_joint": 0.0425}   # open 85 mm
-# gripper_tcp at (0.40, 0, 0.30) m, pointing straight down (checked with forward kinematics)
+# gripper_tcp at (0.40, 0, 0.26) m, pointing straight down (checked with forward kinematics)
 READY = HOME | {"arm_2_joint": -0.35, "arm_3_joint": 0.80, "arm_5_joint": 2.00}
 
 

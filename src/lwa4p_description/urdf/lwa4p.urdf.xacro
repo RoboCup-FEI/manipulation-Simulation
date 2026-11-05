@@ -102,19 +102,36 @@
                    xyz="0 0 0" rpy="-1.5708 0 0" effort="19" lower="${-lim}" upper="${lim}"/>
   <xacro:arm_link name="arm_6_link" stl="arm_6_link" material="schunk_grey"/>
 
-  <!-- tool flange face (end of the arm_6 mesh, z = 0.084) -->
+  <!-- Tool flange and tool mounting from Patrik Bakyta's diploma project
+       (STU FEI, 2018, lwa4p_project): flange 75.1 mm above arm_6_link and
+       turned by pi, sensor frame 55.35 mm above the flange and turned 0.7 rad.
+       The arm_6 mesh itself ends at 84 mm. arm_6_link -> gripper_tcp is
+       289.45 mm along z; the tool length was checked on the real robot
+       (2026-11-02). -->
+  <xacro:property name="fts_z" value="0.05535"/>
+  <xacro:property name="fts_yaw" value="0.7"/>
+
   <joint name="arm_tool0_joint" type="fixed">
     <parent link="arm_6_link"/>
     <child link="arm_tool0"/>
-    <origin xyz="0 0 0.084" rpy="0 0 0"/>
+    <origin xyz="0 0 0.0751" rpy="0 0 ${pi}"/>
   </joint>
   <link name="arm_tool0"/>
 
+  <xacro:include filename="$(find lwa4p_description)/urdf/fts_lwa.urdf.xacro"/>
+  <xacro:fts_lwa parent="arm_tool0" tool_point="fts_lwa_tool_link">
+    <origin xyz="0 0 ${fts_z}" rpy="0 0 ${fts_yaw}"/>
+  </xacro:fts_lwa>
+
   <xacro:arg name="gripper" default="true"/>
-  <!-- rotate the gripper about the flange axis if RViz doesn't match the real arm -->
+  <!-- direction the fingers close in: rotation about the tool axis, measured
+       from the x axis of arm_6_link (not arm_tool0, which is turned by pi).
+       Change it if RViz doesn't match the real arm. -->
   <xacro:arg name="gripper_yaw" default="1.5708"/>
   <xacro:if value="$(arg gripper)">
     <xacro:include filename="$(find lwa4p_description)/urdf/wsg50.urdf.xacro"/>
-    <xacro:wsg50 parent="arm_tool0" yaw="$(arg gripper_yaw)"/>
+    <xacro:wsg_50_xacro name="gripper" parent="fts_lwa_tool_link" tool_point="gripper_tcp">
+      <origin xyz="0 0 0" rpy="0 0 ${$(arg gripper_yaw) - pi - fts_yaw}"/>
+    </xacro:wsg_50_xacro>
   </xacro:if>
 </robot>

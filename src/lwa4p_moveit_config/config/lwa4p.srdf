@@ -54,6 +54,9 @@
     </group_state>
     <end_effector name="wsg50" parent_link="gripper_tcp" group="gripper" parent_group="arm"/>
     <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
+    <!-- arm, sensor and gripper: Adjacent, Default (the finger pads touch at gripper_joint = 0)
+         and Never in 100000 random states. Pairs between the tool and arm_podest_link,
+         arm_1_link, arm_2_link or arm_3_link stay checked even when never hit in sampling. -->
     <disable_collisions link1="arm_1_link" link2="arm_2_link" reason="Adjacent"/>
     <disable_collisions link1="arm_1_link" link2="arm_3_link" reason="Never"/>
     <disable_collisions link1="arm_1_link" link2="arm_podest_link" reason="Adjacent"/>
@@ -69,19 +72,42 @@
     <disable_collisions link1="arm_4_link" link2="arm_5_link" reason="Adjacent"/>
     <disable_collisions link1="arm_4_link" link2="arm_6_link" reason="Never"/>
     <disable_collisions link1="arm_5_link" link2="arm_6_link" reason="Adjacent"/>
-    <disable_collisions link1="arm_6_link" link2="gripper_adapter_link" reason="Adjacent"/>
-    <disable_collisions link1="arm_5_link" link2="gripper_adapter_link" reason="Never"/>
-    <disable_collisions link1="arm_4_link" link2="gripper_adapter_link" reason="Never"/>
-    <disable_collisions link1="gripper_adapter_link" link2="gripper_body_link" reason="Adjacent"/>
-    <disable_collisions link1="arm_6_link" link2="gripper_body_link" reason="Never"/>
-    <disable_collisions link1="arm_5_link" link2="gripper_body_link" reason="Never"/>
-    <disable_collisions link1="gripper_body_link" link2="gripper_finger_left_link" reason="Adjacent"/>
-    <disable_collisions link1="gripper_body_link" link2="gripper_finger_right_link" reason="Adjacent"/>
-    <disable_collisions link1="gripper_finger_left_link" link2="gripper_finger_right_link" reason="Never"/>
-    <disable_collisions link1="gripper_adapter_link" link2="gripper_finger_left_link" reason="Never"/>
-    <disable_collisions link1="gripper_adapter_link" link2="gripper_finger_right_link" reason="Never"/>
+    <disable_collisions link1="arm_4_link" link2="gripper_connector_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="fts_lwa_base_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="gripper_connector_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="gripper_finger_left_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="gripper_finger_right_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="gripper_jaw_left_link" reason="Never"/>
+    <disable_collisions link1="arm_5_link" link2="gripper_jaw_right_link" reason="Never"/>
+    <disable_collisions link1="arm_6_link" link2="fts_lwa_base_link" reason="Adjacent"/>
+    <disable_collisions link1="arm_6_link" link2="gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm_6_link" link2="gripper_connector_link" reason="Never"/>
     <disable_collisions link1="arm_6_link" link2="gripper_finger_left_link" reason="Never"/>
     <disable_collisions link1="arm_6_link" link2="gripper_finger_right_link" reason="Never"/>
+    <disable_collisions link1="arm_6_link" link2="gripper_jaw_left_link" reason="Never"/>
+    <disable_collisions link1="arm_6_link" link2="gripper_jaw_right_link" reason="Never"/>
+    <disable_collisions link1="fts_lwa_base_link" link2="gripper_base_link" reason="Never"/>
+    <disable_collisions link1="fts_lwa_base_link" link2="gripper_connector_link" reason="Adjacent"/>
+    <disable_collisions link1="fts_lwa_base_link" link2="gripper_finger_left_link" reason="Never"/>
+    <disable_collisions link1="fts_lwa_base_link" link2="gripper_finger_right_link" reason="Never"/>
+    <disable_collisions link1="fts_lwa_base_link" link2="gripper_jaw_left_link" reason="Never"/>
+    <disable_collisions link1="fts_lwa_base_link" link2="gripper_jaw_right_link" reason="Never"/>
+    <disable_collisions link1="gripper_base_link" link2="gripper_connector_link" reason="Adjacent"/>
+    <disable_collisions link1="gripper_base_link" link2="gripper_finger_left_link" reason="Never"/>
+    <disable_collisions link1="gripper_base_link" link2="gripper_finger_right_link" reason="Never"/>
+    <disable_collisions link1="gripper_base_link" link2="gripper_jaw_left_link" reason="Adjacent"/>
+    <disable_collisions link1="gripper_base_link" link2="gripper_jaw_right_link" reason="Adjacent"/>
+    <disable_collisions link1="gripper_connector_link" link2="gripper_finger_left_link" reason="Never"/>
+    <disable_collisions link1="gripper_connector_link" link2="gripper_finger_right_link" reason="Never"/>
+    <disable_collisions link1="gripper_connector_link" link2="gripper_jaw_left_link" reason="Never"/>
+    <disable_collisions link1="gripper_connector_link" link2="gripper_jaw_right_link" reason="Never"/>
+    <disable_collisions link1="gripper_finger_left_link" link2="gripper_finger_right_link" reason="Default"/>
+    <disable_collisions link1="gripper_finger_left_link" link2="gripper_jaw_left_link" reason="Adjacent"/>
+    <disable_collisions link1="gripper_finger_left_link" link2="gripper_jaw_right_link" reason="Never"/>
+    <disable_collisions link1="gripper_finger_right_link" link2="gripper_jaw_left_link" reason="Never"/>
+    <disable_collisions link1="gripper_finger_right_link" link2="gripper_jaw_right_link" reason="Adjacent"/>
+    <disable_collisions link1="gripper_jaw_left_link" link2="gripper_jaw_right_link" reason="Never"/>
     <!-- fixed workspace obstacles (workspace_obstacles.urdf.xacro) never move relative
          to each other or to the robot base -->
     <disable_collisions link1="obstacle_table" link2="obstacle_tprofile_top_bar" reason="Adjacent"/>

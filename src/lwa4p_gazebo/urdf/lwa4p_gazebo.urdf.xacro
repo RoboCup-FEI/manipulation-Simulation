@@ -84,7 +84,10 @@
   </xacro:macro>
   <xacro:finger_surface link="gripper_finger_left_link"/>
   <xacro:finger_surface link="gripper_finger_right_link"/>
-  <xacro:colour link="gripper_adapter_link" material="Gazebo/Grey"/>
-  <xacro:colour link="gripper_body_link" material="Gazebo/Grey"/>
+  <xacro:colour link="fts_lwa_base_link" material="Gazebo/Black"/>
+  <xacro:colour link="gripper_connector_link" material="Gazebo/Grey"/>
+  <xacro:colour link="gripper_base_link" material="Gazebo/Grey"/>
   <xacro:colour link="gripper_gap_link" material="Gazebo/Grey"/>
+  <xacro:colour link="gripper_jaw_left_link" material="Gazebo/Black"/>
+  <xacro:colour link="gripper_jaw_right_link" material="Gazebo/Black"/>
 </robot>
