@@ -138,9 +138,14 @@ class GripperNode(Node):
         v = {kv.key: kv.value for kv in st.values}
         msg = (f"status: {st.message} | gap {v['gap_mm']} mm, force {v['force_n']} N, "
                f"{v['temperature_c']} C")
+        # one call site per severity: rclpy raises ValueError if a call site changes severity
         log = self.get_logger()
-        (log.error if st.level >= DiagnosticStatus.ERROR else
-         log.warn if st.level >= DiagnosticStatus.WARN else log.info)(msg)
+        if st.level >= DiagnosticStatus.ERROR:
+            log.error(msg)
+        elif st.level >= DiagnosticStatus.WARN:
+            log.warn(msg)
+        else:
+            log.info(msg)
 
     def prepare(self):
         flags, names = self.wsg.system_state()
